@@ -1,0 +1,132 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../app/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// --- Enums ---
+
+enum Slot {
+  A
+  B
+}
+
+enum TrialOutcome {
+  SUCCESS
+  FAILURE
+}
+
+enum VoteChoice {
+  A
+  B
+  DRAW
+}
+
+enum MatchupStatus {
+  IN_PROGRESS
+  VOTING
+  COMPLETED
+  ABANDONED
+}
+
+// --- Models ---
+
+model Worker {
+  id        String    @id @default(cuid())
+  createdAt DateTime  @default(now())
+  matchups  Matchup[]
+
+  @@map("workers")
+}
+
+model Model {
+  id          String        @id @default(cuid())
+  name        String        @unique
+  endpointUrl String
+  description String?
+  isActive    Boolean       @default(true)
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+  arms        MatchupArm[]
+  ratings     ModelRating[]
+
+  @@map("models")
+}
+
+model Matchup {
+  id        String        @id @default(cuid())
+  status    MatchupStatus @default(IN_PROGRESS)
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+  workerId  String
+  worker    Worker        @relation(fields: [workerId], references: [id])
+  arms      MatchupArm[]
+  trials    Trial[]
+  vote      MatchupVote?
+
+  @@index([status])
+  @@index([workerId])
+  @@map("matchups")
+}
+
+model MatchupArm {
+  id             String  @id @default(cuid())
+  slot           Slot
+  trialsRequired Int     @default(5)
+  matchupId      String
+  matchup        Matchup @relation(fields: [matchupId], references: [id])
+  modelId        String
+  model          Model   @relation(fields: [modelId], references: [id])
+  trials         Trial[]
+
+  @@unique([matchupId, slot])
+  @@index([modelId])
+  @@map("matchup_arms")
+}
+
+model Trial {
+  id           String        @id @default(cuid())
+  trialIndex   Int
+  outcome      TrialOutcome?
+  naturalness  Int?
+  audioQuality Int?
+  startedAt    DateTime      @default(now())
+  endedAt      DateTime?
+  matchupId    String
+  matchup      Matchup       @relation(fields: [matchupId], references: [id])
+  armId        String
+  arm          MatchupArm    @relation(fields: [armId], references: [id])
+
+  @@index([armId])
+  @@index([matchupId, trialIndex])
+  @@map("trials")
+}
+
+model MatchupVote {
+  id          String     @id @default(cuid())
+  choice      VoteChoice
+  rationale   String?
+  submittedAt DateTime   @default(now())
+  matchupId   String     @unique
+  matchup     Matchup    @relation(fields: [matchupId], references: [id])
+
+  @@map("matchup_votes")
+}
+
+model ModelRating {
+  id         String   @id @default(cuid())
+  eloScore   Float    @default(1500)
+  btStrength Float?
+  wins       Int      @default(0)
+  losses     Int      @default(0)
+  draws      Int      @default(0)
+  computedAt DateTime @default(now())
+  modelId    String
+  model      Model    @relation(fields: [modelId], references: [id])
+
+  @@index([modelId, computedAt])
+  @@map("model_ratings")
+}
