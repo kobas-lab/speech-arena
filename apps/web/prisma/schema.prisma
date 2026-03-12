@@ -75,7 +75,7 @@ model Matchup {
 model MatchupArm {
   id             String  @id @default(cuid())
   slot           Slot
-  trialsRequired Int     @default(5)
+  trialsRequired Int     @default(2)
   matchupId      String
   matchup        Matchup @relation(fields: [matchupId], references: [id])
   modelId        String

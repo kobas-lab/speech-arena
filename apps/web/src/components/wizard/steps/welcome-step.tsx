@@ -21,8 +21,8 @@ export function WelcomeStep({ onStart, isLoading }: WelcomeStepProps) {
         <div className="text-sm text-muted-foreground space-y-2">
           <p>以下の手順で評価を行います：</p>
           <ol className="list-decimal list-inside space-y-1">
-            <li>システム A と5回会話する</li>
-            <li>システム B と5回会話する</li>
+            <li>システム A と2回会話する</li>
+            <li>システム B と2回会話する</li>
             <li>各会話について自然さと音声品質を評価する</li>
             <li>全体としてどちらのシステムが良かったか投票する</li>
           </ol>
