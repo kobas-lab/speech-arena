@@ -44,7 +44,17 @@ export function WelcomeStep({ onStart, isLoading }: WelcomeStepProps) {
               <p>「Connect」ボタンを押して会話を開始してください。</p>
             </div>
             <div className="space-y-2">
-              <p className="font-medium text-foreground">2. 接続すると、以下のような対話画面になります</p>
+              <p className="font-medium text-foreground">2. マイクの使用許可を求められたら「許可」してください</p>
+              <Image
+                src="/guide/mic-permission.png"
+                alt="マイク許可ダイアログ"
+                width={300}
+                height={400}
+                className="rounded-md border mx-auto"
+              />
+            </div>
+            <div className="space-y-2">
+              <p className="font-medium text-foreground">3. 接続すると、以下のような対話画面になります</p>
               <Image
                 src="/guide/moshi-conversation.png"
                 alt="Moshi 対話画面"
@@ -53,16 +63,6 @@ export function WelcomeStep({ onStart, isLoading }: WelcomeStepProps) {
                 className="rounded-md border mx-auto"
               />
               <p>AI とあなたの音声が波形で表示されます。自由に話しかけてください。</p>
-            </div>
-            <div className="space-y-2">
-              <p className="font-medium text-foreground">3. マイクの使用許可を求められたら「許可」してください</p>
-              <Image
-                src="/guide/mic-permission.png"
-                alt="マイク許可ダイアログ"
-                width={300}
-                height={400}
-                className="rounded-md border mx-auto"
-              />
             </div>
             <div className="space-y-2">
               <p className="font-medium text-foreground">4. 会話が終わったら、このタブに戻って評価を入力してください</p>
