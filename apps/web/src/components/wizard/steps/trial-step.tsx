@@ -45,16 +45,16 @@ export function TrialStep({
       <CardHeader>
         <div className="flex items-center justify-between">
           <CardTitle>
-            Trial {currentTrialIndex} of {arm.trialsRequired}
+            会話 {currentTrialIndex} / {arm.trialsRequired}
           </CardTitle>
           <Badge variant="secondary">System {arm.slot}</Badge>
         </div>
         <CardDescription>
-          System {currentArmIndex + 1} of {totalArms}
+          システム {currentArmIndex + 1} / {totalArms}
         </CardDescription>
         <Progress value={progress} className="mt-2" />
         <p className="text-xs text-muted-foreground mt-1">
-          Overall progress: {completedTrials} / {totalTrials} trials
+          全体の進捗: {completedTrials} / {totalTrials} 回
         </p>
       </CardHeader>
       <CardContent>
@@ -76,10 +76,10 @@ function ReadyPhase({ isLoading, onStart }: { isLoading: boolean; onStart: () =>
   return (
     <div className="space-y-4 text-center">
       <p className="text-sm text-muted-foreground">
-        Click below to start a conversation. A new tab will open with the speech interface.
+        下のボタンを押すと会話が始まります。新しいタブで音声対話画面が開きます。
       </p>
       <Button onClick={onStart} disabled={isLoading} className="w-full" size="lg">
-        {isLoading ? "Starting..." : "Start Conversation"}
+        {isLoading ? "開始中..." : "会話を開始する"}
       </Button>
     </div>
   );
@@ -89,17 +89,17 @@ function InSessionPhase({ endpointUrl, onDone }: { endpointUrl: string | null; o
   return (
     <div className="space-y-4 text-center">
       <p className="text-sm text-muted-foreground">
-        A conversation tab should have opened. Talk with the system, then return here when you&apos;re done.
+        会話タブが開いています。システムと話した後、こちらに戻ってください。
       </p>
       {endpointUrl && (
         <Button variant="outline" asChild>
           <a href={endpointUrl} target="_blank" rel="noopener noreferrer">
-            Reopen Conversation Tab
+            会話タブを再度開く
           </a>
         </Button>
       )}
       <Button onClick={onDone} className="w-full" size="lg">
-        I&apos;m Done With This Conversation
+        会話を終了する
       </Button>
     </div>
   );
@@ -129,30 +129,30 @@ function RatingPhase({
   return (
     <div className="space-y-6">
       <div className="space-y-2">
-        <label className="text-sm font-medium">Was the conversation successful?</label>
+        <label className="text-sm font-medium">会話は成功しましたか？</label>
         <div className="flex gap-2">
           <Button
             variant={outcome === "SUCCESS" ? "default" : "outline"}
             onClick={() => setOutcome("SUCCESS")}
             className="flex-1"
           >
-            Success
+            成功
           </Button>
           <Button
             variant={outcome === "FAILURE" ? "default" : "outline"}
             onClick={() => setOutcome("FAILURE")}
             className="flex-1"
           >
-            Failure
+            失敗
           </Button>
         </div>
       </div>
 
-      <RatingScale label="Naturalness" value={naturalness} onChange={setNaturalness} />
-      <RatingScale label="Audio Quality" value={audioQuality} onChange={setAudioQuality} />
+      <RatingScale label="自然さ" value={naturalness} onChange={setNaturalness} />
+      <RatingScale label="音声品質" value={audioQuality} onChange={setAudioQuality} />
 
       <Button onClick={handleSubmit} disabled={!canSubmit || isLoading} className="w-full" size="lg">
-        {isLoading ? "Submitting..." : "Submit Rating"}
+        {isLoading ? "送信中..." : "評価を送信する"}
       </Button>
     </div>
   );
@@ -184,8 +184,8 @@ function RatingScale({
         ))}
       </div>
       <div className="flex justify-between text-xs text-muted-foreground">
-        <span>Poor</span>
-        <span>Excellent</span>
+        <span>悪い</span>
+        <span>良い</span>
       </div>
     </div>
   );

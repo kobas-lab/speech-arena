@@ -24,9 +24,9 @@ export function VoteStep({ onVote, isLoading }: VoteStepProps) {
   return (
     <Card className="mx-auto max-w-lg">
       <CardHeader className="text-center">
-        <CardTitle>Final Vote</CardTitle>
+        <CardTitle>最終投票</CardTitle>
         <CardDescription>
-          Which system did you prefer overall?
+          全体的にどちらのシステムが良かったですか？
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
@@ -38,15 +38,15 @@ export function VoteStep({ onVote, isLoading }: VoteStepProps) {
               onClick={() => setChoice(option)}
               className="h-16 text-lg"
             >
-              {option === "DRAW" ? "Draw" : `System ${option}`}
+              {option === "DRAW" ? "引き分け" : `システム ${option}`}
             </Button>
           ))}
         </div>
 
         <div className="space-y-2">
-          <label className="text-sm font-medium">Rationale (optional)</label>
+          <label className="text-sm font-medium">理由（任意）</label>
           <Textarea
-            placeholder="Why did you prefer this system?"
+            placeholder="そのシステムを選んだ理由を教えてください"
             value={rationale}
             onChange={(e) => setRationale(e.target.value)}
             rows={3}
@@ -59,7 +59,7 @@ export function VoteStep({ onVote, isLoading }: VoteStepProps) {
           className="w-full"
           size="lg"
         >
-          {isLoading ? "Submitting..." : "Submit Vote"}
+          {isLoading ? "送信中..." : "投票する"}
         </Button>
       </CardContent>
     </Card>

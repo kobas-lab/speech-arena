@@ -26,7 +26,7 @@ export function LeaderboardTable() {
   }, []);
 
   if (loading) {
-    return <p className="text-center text-muted-foreground py-8">Loading leaderboard...</p>;
+    return <p className="text-center text-muted-foreground py-8">リーダーボードを読み込み中...</p>;
   }
 
   if (error) {
@@ -34,20 +34,20 @@ export function LeaderboardTable() {
   }
 
   if (entries.length === 0) {
-    return <p className="text-center text-muted-foreground py-8">No evaluation data yet.</p>;
+    return <p className="text-center text-muted-foreground py-8">まだ評価データがありません。</p>;
   }
 
   return (
     <Table>
       <TableHeader>
         <TableRow>
-          <TableHead className="w-12">Rank</TableHead>
-          <TableHead>Model</TableHead>
-          <TableHead className="text-right">Score</TableHead>
-          <TableHead className="text-right">Success Rate</TableHead>
-          <TableHead className="text-right">Naturalness</TableHead>
-          <TableHead className="text-right">Audio Quality</TableHead>
-          <TableHead className="text-right">Trials</TableHead>
+          <TableHead className="w-12">順位</TableHead>
+          <TableHead>モデル</TableHead>
+          <TableHead className="text-right">スコア</TableHead>
+          <TableHead className="text-right">成功率</TableHead>
+          <TableHead className="text-right">自然さ</TableHead>
+          <TableHead className="text-right">音声品質</TableHead>
+          <TableHead className="text-right">試行数</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>

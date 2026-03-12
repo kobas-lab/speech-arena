@@ -14,22 +14,22 @@ export function WelcomeStep({ onStart, isLoading }: WelcomeStepProps) {
       <CardHeader className="text-center">
         <CardTitle className="text-2xl">Speech Arena</CardTitle>
         <CardDescription>
-          Help us evaluate speech dialogue models by comparing two systems.
+          2つの音声対話システムを比較して評価してください。
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="text-sm text-muted-foreground space-y-2">
-          <p>You will be asked to:</p>
+          <p>以下の手順で評価を行います：</p>
           <ol className="list-decimal list-inside space-y-1">
-            <li>Have 5 conversations with System A</li>
-            <li>Have 5 conversations with System B</li>
-            <li>Rate each conversation on naturalness and audio quality</li>
-            <li>Vote on which system you preferred overall</li>
+            <li>システム A と5回会話する</li>
+            <li>システム B と5回会話する</li>
+            <li>各会話について自然さと音声品質を評価する</li>
+            <li>全体としてどちらのシステムが良かったか投票する</li>
           </ol>
-          <p>Each conversation opens in a new tab. Return here after each one to submit your rating.</p>
+          <p>会話は新しいタブで開きます。各会話の後、このページに戻って評価を入力してください。</p>
         </div>
         <Button onClick={onStart} disabled={isLoading} className="w-full" size="lg">
-          {isLoading ? "Setting up..." : "Start Evaluation"}
+          {isLoading ? "準備中..." : "評価を開始する"}
         </Button>
       </CardContent>
     </Card>

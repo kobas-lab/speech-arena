@@ -8,21 +8,21 @@ export function CompleteStep() {
   return (
     <Card className="mx-auto max-w-lg text-center">
       <CardHeader>
-        <CardTitle className="text-2xl">Thank You!</CardTitle>
+        <CardTitle className="text-2xl">ありがとうございました！</CardTitle>
         <CardDescription>
-          Your evaluation has been recorded successfully.
+          評価が正常に記録されました。
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
         <p className="text-sm text-muted-foreground">
-          Your feedback helps us improve speech dialogue systems. We appreciate your time and effort.
+          ご協力いただきありがとうございます。いただいた評価は音声対話システムの改善に役立てます。
         </p>
         <div className="flex flex-col gap-2">
           <Button asChild>
-            <Link href="/leaderboard">View Leaderboard</Link>
+            <Link href="/leaderboard">リーダーボードを見る</Link>
           </Button>
           <Button variant="outline" onClick={() => window.location.reload()}>
-            Start Another Evaluation
+            もう一度評価する
           </Button>
         </div>
       </CardContent>
