@@ -1,3 +1,4 @@
 .vercel
 memo.md
 client/dist
+scripts/.env

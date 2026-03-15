@@ -17,10 +17,16 @@ MODEL_B_REPO="abePclWaseda/llm-jp-moshi-v1.1-all-staged"
 MODEL_B_GPU=1
 MODEL_B_PORT=8999
 
-MOSHI_STATIC="$SCRIPT_DIR/../client/dist"
-TUNNEL_LOG_DIR="/tmp/speech-arena-tunnels"
+# 環境変数の読み込み
+if [ -f "$(dirname "$0")/.env" ]; then
+  set -a; source "$(dirname "$0")/.env"; set +a
+fi
+export UV_PROJECT_ENVIRONMENT="$HOME/.venvs/moshi-finetune"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 WEB_DIR="$SCRIPT_DIR/../apps/web"
+MOSHI_DIR="/mnt/kiso-qnap3/yuabe/kobas-lab/moshi-finetune"
+MOSHI_STATIC="$SCRIPT_DIR/../client/dist"
+TUNNEL_LOG_DIR="/tmp/speech-arena-tunnels"
 # ------------------------------------------------------------
 
 mkdir -p "$TUNNEL_LOG_DIR"
@@ -30,14 +36,14 @@ echo "=== Speech Arena ラウンド2 起動 ==="
 # --- Moshi サーバー起動 ---
 echo "[1/4] Moshi サーバー A ($MODEL_A_NAME) を GPU $MODEL_A_GPU で起動中..."
 tmux new-session -d -s moshi-a \
-  "CUDA_VISIBLE_DEVICES=$MODEL_A_GPU uv run -m moshi.server \
+  "cd $MOSHI_DIR && HF_TOKEN=$HF_TOKEN UV_PROJECT_ENVIRONMENT=$HOME/.venvs/moshi-finetune CUDA_VISIBLE_DEVICES=$MODEL_A_GPU uv run -m moshi.server \
     --hf-repo $MODEL_A_REPO \
     --port $MODEL_A_PORT \
     --static $MOSHI_STATIC 2>&1 | tee /tmp/speech-arena-moshi-a.log"
 
 echo "[2/4] Moshi サーバー B ($MODEL_B_NAME) を GPU $MODEL_B_GPU で起動中..."
 tmux new-session -d -s moshi-b \
-  "CUDA_VISIBLE_DEVICES=$MODEL_B_GPU uv run -m moshi.server \
+  "cd $MOSHI_DIR && HF_TOKEN=$HF_TOKEN UV_PROJECT_ENVIRONMENT=$HOME/.venvs/moshi-finetune CUDA_VISIBLE_DEVICES=$MODEL_B_GPU uv run -m moshi.server \
     --hf-repo $MODEL_B_REPO \
     --port $MODEL_B_PORT \
     --static $MOSHI_STATIC 2>&1 | tee /tmp/speech-arena-moshi-b.log"
