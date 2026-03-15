@@ -109,7 +109,16 @@ export function LeaderboardTable() {
                 <TableCell>
                   {i === 0 ? <Badge variant="default">1st</Badge> : i + 1}
                 </TableCell>
-                <TableCell className="font-medium">{entry.modelName}</TableCell>
+                <TableCell className="font-medium">
+              <a
+                href={`https://huggingface.co/abePclWaseda/${entry.modelName}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="hover:underline"
+              >
+                {entry.modelName}
+              </a>
+            </TableCell>
                 <TableCell className="text-right">{(entry.totalScore * 100).toFixed(1)}%</TableCell>
                 <TableCell className="text-right">{(entry.successRate * 100).toFixed(1)}%</TableCell>
                 <TableCell className="text-right">{entry.avgNaturalness.toFixed(2)}</TableCell>
