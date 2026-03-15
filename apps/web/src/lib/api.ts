@@ -46,6 +46,10 @@ export function submitVote(data: MatchupVoteRequest): Promise<MatchupVoteRespons
   });
 }
 
-export function getLeaderboard(): Promise<LeaderboardResponse> {
-  return fetchAPI("/api/leaderboard");
+export function getLeaderboard(params?: { from?: string; to?: string }): Promise<LeaderboardResponse> {
+  const searchParams = new URLSearchParams();
+  if (params?.from) searchParams.set("from", params.from);
+  if (params?.to) searchParams.set("to", params.to);
+  const query = searchParams.toString();
+  return fetchAPI(`/api/leaderboard${query ? `?${query}` : ""}`);
 }

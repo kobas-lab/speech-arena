@@ -1,15 +1,32 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/src/lib/prisma";
 import type { LeaderboardResponse } from "@/src/lib/validations/leaderboard";
 
-export async function GET() {
+export async function GET(request: NextRequest) {
+  const searchParams = request.nextUrl.searchParams;
+  const from = searchParams.get("from");
+  const to = searchParams.get("to");
+
+  const trialDateFilter: Record<string, Date> = {};
+  if (from) trialDateFilter.gte = new Date(from);
+  if (to) {
+    const toDate = new Date(to);
+    toDate.setHours(23, 59, 59, 999);
+    trialDateFilter.lte = toDate;
+  }
+
   const models = await prisma.model.findMany({
     where: { isActive: true },
     include: {
       arms: {
         include: {
           trials: {
-            where: { outcome: { not: null } },
+            where: {
+              outcome: { not: null },
+              ...(Object.keys(trialDateFilter).length > 0
+                ? { endedAt: trialDateFilter }
+                : {}),
+            },
           },
         },
       },
