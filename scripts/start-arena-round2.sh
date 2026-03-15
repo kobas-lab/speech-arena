@@ -17,7 +17,7 @@ MODEL_B_REPO="abePclWaseda/llm-jp-moshi-v1.1-all-staged"
 MODEL_B_GPU=1
 MODEL_B_PORT=8999
 
-MOSHI_STATIC="client/dist"
+MOSHI_STATIC="$SCRIPT_DIR/../client/dist"
 TUNNEL_LOG_DIR="/tmp/speech-arena-tunnels"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 WEB_DIR="$SCRIPT_DIR/../apps/web"
