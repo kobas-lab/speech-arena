@@ -1,19 +1,14 @@
-# 🎙 SpeechArena
+# SpeechArena
 
-SpeechArena is a human-centered A/B evaluation platform for real-time speech dialogue models.
+[![日本語](https://img.shields.io/badge/lang-日本語-red.svg)](README_ja.md)
 
-It enables pairwise comparison of full-duplex speech dialogue systems through live human interaction.
+SpeechArena is a human-centered A/B evaluation platform for real-time full-duplex speech dialogue models.
 
-This project is designed to evaluate:
-
-- Conversation success rate
-- Human subjective ratings
-- Pairwise model preference
-- Real-time robustness
+It enables pairwise comparison of speech dialogue systems through live human interaction, using the **FD-DMOS (Full-Duplex Dialogue MOS)** evaluation framework.
 
 ---
 
-## 🚀 Motivation
+## Motivation
 
 Real-time speech dialogue systems (e.g., Moshi-based models) often suffer from:
 
@@ -26,285 +21,129 @@ SpeechArena evaluates models under real interactive conditions rather than offli
 
 ---
 
-## 🏗 Monorepo Layout
+## Evaluation: FD-DMOS Framework
 
-```
+Each conversation is rated on 4 dimensions (1–5 scale):
 
-speech-arena/
-├── README.md
-├── apps/
-│   └── web/              # Next.js (App Router) + Prisma
-├── services/
-│   └── moshi/            # (optional) gateway / proxy / utilities
-└── scripts/              # (optional) ops, data export, analysis
+|                    | Objective-leaning                        | Subjective-leaning                          |
+|--------------------|------------------------------------------|---------------------------------------------|
+| **Sound quality**  | Acoustic Naturalness (speech signal)     | Perceived Naturalness (human-likeness)      |
+| **Content**        | Semantic Clarity (comprehensibility)     | Conversational Usefulness (dialogue value)  |
 
-```
-
-> MVP: `apps/web` だけでも動きます。
+Additionally:
+- **Conversation success** (Yes / No)
+- **Packet loss detection** (for filtering unreliable trials)
+- **A/B preference vote** (after all trials)
 
 ---
 
-## 🏗 System Architecture (MVP)
-
-```
-
-Worker Browser
-↓
-SpeechArena Web (Next.js)
-↓ (connect)
-Moshi Server(s) (GPU)  -- exposed via Cloudflare Tunnel (HTTPS)
-
-````
-
-- Models are hosted via `uv run -m moshi.server`
-- GPU inference runs on:
-  - Lab GPU server
-  - ABCI (for training)
-- SpeechArena handles:
-  - Model assignment
-  - Trial tracking
-  - Rating collection
-  - Pairwise ranking
-
----
-
-## 🧪 Evaluation Protocol (MVP)
+## Evaluation Protocol
 
 Each worker performs:
 
-- 5 trials per model
-- Each trial: ~2 minutes conversation
-- After each trial:
-  - Conversation success (Yes / No)
-  - Naturalness (1–5)
-  - Audio quality (1–5)
+- 2 conversations per model (~2 min each)
+- After each conversation: FD-DMOS 4-dimension rating + success/failure + packet loss check
+- After all conversations: direct A/B preference vote
 
-After all trials:
-
-- Direct A/B preference vote
-
-Conversation failures are included in scoring.
+Trials with packet loss are excluded from leaderboard scoring.
 
 ---
 
-## 📊 Scoring (Current MVP)
+## Scoring
 
-For each model:
-
-```txt
+```
 SuccessRate  = successful_trials / total_trials
-AverageScore = mean(naturalness, audio_quality)   # normalized to 0..1 if needed
+AverageScore = mean(4 FD-DMOS scores) normalized to 0..1
 TotalScore   = 0.5 * SuccessRate + 0.5 * AverageScore
-````
-
-Pairwise win rate is also computed.
-
-Future versions will include:
-
-* Bradley–Terry ranking
-* Elo rating
-* Stability-aware scoring
-* Automatic success detection
-
----
-
-## 🛠 Tech Stack
-
-* Next.js (App Router)
-* Prisma + PostgreSQL
-* Moshi (`uv run -m moshi.server`)
-* Cloudflare Tunnel (HTTPS exposure)
-* GPU inference (24GB+ VRAM recommended)
-
----
-
-# 🔧 Setup Guide (MVP)
-
-## 0) Prerequisites
-
-* Node.js (recommended: Node 20 LTS)
-* PostgreSQL (local or hosted)
-* Python env for Moshi server (GPU side)
-* `cloudflared` (GPU side)
-
----
-
-## 1) Clone Repository
-
-```bash
-git clone https://github.com/your-org/speech-arena.git
-cd speech-arena
 ```
 
 ---
 
-## 2) Create Next.js App (Monorepo)
+## System Architecture
 
-Create the web app under `apps/web`:
-
-```bash
-mkdir -p apps
-cd apps
-npx create-next-app@latest web
 ```
-
-Recommended options:
-
-* TypeScript: Yes
-* ESLint: Yes
-* Tailwind: Yes
-* src/: Yes
-* App Router: Yes
-
-Then return to repo root:
-
-```bash
-cd ..
+Worker Browser
+↓
+SpeechArena Web (Next.js on Vercel)
+↓ (redirect to conversation tab)
+Moshi Server (GPU) -- exposed via Cloudflare Tunnel (HTTPS)
 ```
 
 ---
 
-## 3) Install Dependencies (web)
+## Tech Stack
+
+- Next.js 16 (App Router) + React 19
+- Prisma 7 + Supabase PostgreSQL
+- Moshi (`uv run -m moshi.server`)
+- Cloudflare Tunnel (HTTPS exposure)
+- Vercel (deployment)
+- GPU inference (RTX 3090 x2, 2 models simultaneously)
+
+---
+
+## Monorepo Layout
+
+```
+speech-arena/
+├── README.md / README_ja.md
+├── apps/
+│   └── web/              # Next.js (App Router) + Prisma
+├── client/
+│   └── dist/             # Moshi Web UI static files
+└── scripts/              # Automation (start/stop arena)
+```
+
+---
+
+## Quick Start
 
 ```bash
-cd apps/web
+git clone https://github.com/kobas-lab/speech-arena.git
+cd speech-arena/apps/web
 npm install
-```
-
----
-
-## 4) Setup Database (Prisma)
-
-Create `.env` in `apps/web`:
-
-```env
-DATABASE_URL="postgresql://USER:PASSWORD@HOST:5432/DBNAME?schema=public"
-MODEL_A_URL="https://xxxxx.trycloudflare.com"
-MODEL_B_URL="https://yyyyy.trycloudflare.com"
-```
-
-Run migration:
-
-```bash
+cp .env.example .env  # configure DATABASE_URL, DIRECT_URL
 npx prisma migrate dev
-```
-
----
-
-## 5) Launch Moshi Servers (GPU Side)
-
-Example:
-
-```bash
-# Model A
-uv run -m moshi.server --model-path /path/to/model_A --port 8998
-
-# Model B
-uv run -m moshi.server --model-path /path/to/model_B --port 8999
-```
-
----
-
-## 6) Expose Moshi via Cloudflare Tunnel (GPU Side)
-
-### Install cloudflared (no sudo option)
-
-If you cannot use `sudo`, use the standalone binary:
-
-```bash
-mkdir -p $HOME/bin
-cd $HOME/bin
-curl -L -o cloudflared https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64
-chmod +x cloudflared
-export PATH="$HOME/bin:$PATH"
-```
-
-### Run tunnel
-
-```bash
-cloudflared tunnel --url http://localhost:8998
-cloudflared tunnel --url http://localhost:8999
-```
-
-You will receive HTTPS URLs like:
-
-```txt
-https://xxxxx.trycloudflare.com
-https://yyyyy.trycloudflare.com
-```
-
-Set them in `apps/web/.env` (or Vercel env).
-
----
-
-## 7) Run Web App Locally
-
-```bash
-cd apps/web
 npm run dev
 ```
 
-Open:
+See [README_ja.md](README_ja.md) for detailed setup instructions.
 
-```txt
-http://localhost:3000
+---
+
+## Scripts
+
+```bash
+# Start Moshi servers + Cloudflare Tunnels + DB seed (round 1)
+./scripts/start-arena.sh
+
+# Start round 2 (different model pair)
+./scripts/start-arena-round2.sh
+
+# Stop all sessions
+./scripts/stop-arena.sh
 ```
 
 ---
 
-## 8) Deploy to Vercel
+## Roadmap
 
-Deploy `apps/web` as the Vercel project root (Monorepo setting).
-
-Set environment variables in Vercel dashboard:
-
-* `DATABASE_URL`
-* `MODEL_A_URL`
-* `MODEL_B_URL`
-
----
-
-# ⚠️ Limitations (MVP)
-
-* Manual success labeling
-* No automatic latency measurement
-* No turn-taking logging
-* Limited concurrent sessions (GPU constraint)
-* Temporary Cloudflare URLs (unless configured)
+- [ ] Fixed domain via Cloudflare
+- [ ] Bradley-Terry / Elo ranking
+- [ ] Automatic success detection
+- [ ] Audio recording (server-side)
+- [ ] Turn-taking metrics
+- [ ] Multi-model tournament
 
 ---
 
-# 🗺 Roadmap
-
-* [ ] Fixed domain via Cloudflare
-* [ ] WebRTC integration
-* [ ] Automatic success detection
-* [ ] Turn-taking metrics
-* [ ] Bradley–Terry ranking
-* [ ] Public leaderboard
-* [ ] Multi-model tournament
-
----
-
-# 🎓 Research Goal
-
-SpeechArena aims to become a standardized benchmark for:
-
-* Real-time speech dialogue systems
-* Full-duplex conversational AI
-* Stability-aware evaluation
-* Human-centered model ranking
-
----
-
-# 📜 License
+## License
 
 MIT (TBD)
 
 ---
 
-# 👥 Authors
+## Authors
 
-* Your Name
-* Your Lab / Institution
-
+- Your Name
+- Your Lab / Institution
