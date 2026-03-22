@@ -59,8 +59,11 @@ export function EvaluationWizard() {
 
   const handleCompleteTrial = async (data: {
     outcome: "SUCCESS" | "FAILURE";
-    naturalness: number;
-    audioQuality: number;
+    acousticNaturalness: number;
+    perceivedNaturalness: number;
+    semanticClarity: number;
+    conversationalUsefulness: number;
+    hasPacketLoss: boolean;
   }) => {
     if (!state.currentTrialId) return;
     dispatch({ type: "SET_LOADING", payload: true });

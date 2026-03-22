@@ -88,17 +88,22 @@ model MatchupArm {
 }
 
 model Trial {
-  id           String        @id @default(cuid())
-  trialIndex   Int
-  outcome      TrialOutcome?
-  naturalness  Int?
-  audioQuality Int?
-  startedAt    DateTime      @default(now())
-  endedAt      DateTime?
-  matchupId    String
-  matchup      Matchup       @relation(fields: [matchupId], references: [id])
-  armId        String
-  arm          MatchupArm    @relation(fields: [armId], references: [id])
+  id                      String        @id @default(cuid())
+  trialIndex              Int
+  outcome                 TrialOutcome?
+  naturalness             Int?
+  audioQuality            Int?
+  acousticNaturalness     Int?          // FD-DMOS: 音声自然性
+  perceivedNaturalness    Int?          // FD-DMOS: 聴感自然性
+  semanticClarity         Int?          // FD-DMOS: 意味理解性
+  conversationalUsefulness Int?         // FD-DMOS: 対話有用性
+  hasPacketLoss           Boolean?      // 通信品質: パケットロスによる音切れがあったか
+  startedAt               DateTime      @default(now())
+  endedAt                 DateTime?
+  matchupId               String
+  matchup                 Matchup       @relation(fields: [matchupId], references: [id])
+  armId                   String
+  arm                     MatchupArm    @relation(fields: [armId], references: [id])
 
   @@index([armId])
   @@index([matchupId, trialIndex])

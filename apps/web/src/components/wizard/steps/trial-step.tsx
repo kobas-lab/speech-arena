@@ -7,6 +7,15 @@ import { Progress } from "@/src/components/ui/progress";
 import { Badge } from "@/src/components/ui/badge";
 import type { ArmData, TrialPhase } from "@/src/lib/types";
 
+interface RatingData {
+  outcome: "SUCCESS" | "FAILURE";
+  acousticNaturalness: number;
+  perceivedNaturalness: number;
+  semanticClarity: number;
+  conversationalUsefulness: number;
+  hasPacketLoss: boolean;
+}
+
 interface TrialStepProps {
   arm: ArmData;
   currentArmIndex: number;
@@ -17,11 +26,7 @@ interface TrialStepProps {
   isLoading: boolean;
   onStartTrial: () => void;
   onSessionDone: () => void;
-  onCompleteTrial: (data: {
-    outcome: "SUCCESS" | "FAILURE";
-    naturalness: number;
-    audioQuality: number;
-  }) => void;
+  onCompleteTrial: (data: RatingData) => void;
 }
 
 export function TrialStep({
@@ -110,20 +115,39 @@ function RatingPhase({
   onSubmit,
 }: {
   isLoading: boolean;
-  onSubmit: (data: { outcome: "SUCCESS" | "FAILURE"; naturalness: number; audioQuality: number }) => void;
+  onSubmit: (data: RatingData) => void;
 }) {
   const [outcome, setOutcome] = useState<"SUCCESS" | "FAILURE" | null>(null);
-  const [naturalness, setNaturalness] = useState<number | null>(null);
-  const [audioQuality, setAudioQuality] = useState<number | null>(null);
+  const [acousticNaturalness, setAcousticNaturalness] = useState<number | null>(null);
+  const [perceivedNaturalness, setPerceivedNaturalness] = useState<number | null>(null);
+  const [semanticClarity, setSemanticClarity] = useState<number | null>(null);
+  const [conversationalUsefulness, setConversationalUsefulness] = useState<number | null>(null);
+  const [hasPacketLoss, setHasPacketLoss] = useState<boolean | null>(null);
 
-  const canSubmit = outcome !== null && naturalness !== null && audioQuality !== null;
+  const canSubmit =
+    outcome !== null &&
+    acousticNaturalness !== null &&
+    perceivedNaturalness !== null &&
+    semanticClarity !== null &&
+    conversationalUsefulness !== null &&
+    hasPacketLoss !== null;
 
   const handleSubmit = () => {
     if (!canSubmit) return;
-    onSubmit({ outcome, naturalness: naturalness!, audioQuality: audioQuality! });
+    onSubmit({
+      outcome,
+      acousticNaturalness: acousticNaturalness!,
+      perceivedNaturalness: perceivedNaturalness!,
+      semanticClarity: semanticClarity!,
+      conversationalUsefulness: conversationalUsefulness!,
+      hasPacketLoss: hasPacketLoss!,
+    });
     setOutcome(null);
-    setNaturalness(null);
-    setAudioQuality(null);
+    setAcousticNaturalness(null);
+    setPerceivedNaturalness(null);
+    setSemanticClarity(null);
+    setConversationalUsefulness(null);
+    setHasPacketLoss(null);
   };
 
   return (
@@ -148,8 +172,53 @@ function RatingPhase({
         </div>
       </div>
 
-      <RatingScale label="自然さ" value={naturalness} onChange={setNaturalness} />
-      <RatingScale label="音声品質" value={audioQuality} onChange={setAudioQuality} />
+      <RatingScale
+        label="音声自然性"
+        description="音響的に自然ですか？（ノイズ、発音、プロソディ）"
+        value={acousticNaturalness}
+        onChange={setAcousticNaturalness}
+      />
+      <RatingScale
+        label="聴感自然性"
+        description="人間らしく自然に聞こえますか？"
+        value={perceivedNaturalness}
+        onChange={setPerceivedNaturalness}
+      />
+      <RatingScale
+        label="意味理解性"
+        description="発話の意味は理解できますか？"
+        value={semanticClarity}
+        onChange={setSemanticClarity}
+      />
+      <RatingScale
+        label="対話有用性"
+        description="この応答は会話として適切・有用ですか？"
+        value={conversationalUsefulness}
+        onChange={setConversationalUsefulness}
+      />
+
+      <div className="space-y-2">
+        <label className="text-sm font-medium">通信品質について</label>
+        <p className="text-xs text-muted-foreground">
+          音声がプツプツ途切れる（パケットロス）ことがありましたか？
+        </p>
+        <div className="flex gap-2">
+          <Button
+            variant={hasPacketLoss === true ? "default" : "outline"}
+            onClick={() => setHasPacketLoss(true)}
+            className="flex-1"
+          >
+            あった
+          </Button>
+          <Button
+            variant={hasPacketLoss === false ? "default" : "outline"}
+            onClick={() => setHasPacketLoss(false)}
+            className="flex-1"
+          >
+            なかった
+          </Button>
+        </div>
+      </div>
 
       <Button onClick={handleSubmit} disabled={!canSubmit || isLoading} className="w-full" size="lg">
         {isLoading ? "送信中..." : "評価を送信する"}
@@ -160,16 +229,19 @@ function RatingPhase({
 
 function RatingScale({
   label,
+  description,
   value,
   onChange,
 }: {
   label: string;
+  description: string;
   value: number | null;
   onChange: (v: number) => void;
 }) {
   return (
     <div className="space-y-2">
       <label className="text-sm font-medium">{label}</label>
+      <p className="text-xs text-muted-foreground">{description}</p>
       <div className="flex gap-2">
         {[1, 2, 3, 4, 5].map((n) => (
           <Button

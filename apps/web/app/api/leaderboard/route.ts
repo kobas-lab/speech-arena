@@ -35,43 +35,57 @@ export async function GET(request: NextRequest) {
 
   const leaderboard: LeaderboardResponse = models
     .map((model) => {
-      const trials = model.arms.flatMap((arm) => arm.trials);
-      const totalTrials = trials.length;
+      const allTrials = model.arms.flatMap((arm) => arm.trials);
+      const totalTrials = allTrials.length;
 
-      if (totalTrials === 0) {
+      // パケットロスありの trial を除外してスコア計算
+      const trials = allTrials.filter((t) => t.hasPacketLoss !== true);
+      const filteredTrials = trials.length;
+
+      if (filteredTrials === 0) {
         return {
           modelId: model.id,
           modelName: model.name,
           successRate: 0,
-          avgNaturalness: 0,
-          avgAudioQuality: 0,
+          avgAcousticNaturalness: 0,
+          avgPerceivedNaturalness: 0,
+          avgSemanticClarity: 0,
+          avgConversationalUsefulness: 0,
           totalScore: 0,
-          totalTrials: 0,
+          totalTrials,
+          filteredTrials: 0,
         };
       }
 
       const successCount = trials.filter(
         (t) => t.outcome === "SUCCESS"
       ).length;
-      const successRate = successCount / totalTrials;
+      const successRate = successCount / filteredTrials;
 
-      const avgNaturalness =
-        trials.reduce((sum, t) => sum + (t.naturalness ?? 0), 0) / totalTrials;
-      const avgAudioQuality =
-        trials.reduce((sum, t) => sum + (t.audioQuality ?? 0), 0) / totalTrials;
+      const avg = (field: keyof typeof trials[0]) =>
+        trials.reduce((sum, t) => sum + ((t[field] as number) ?? 0), 0) / filteredTrials;
 
-      // averageScore: mean of naturalness and audioQuality normalized from 1-5 to 0-1
-      const averageScore = ((avgNaturalness + avgAudioQuality) / 2 - 1) / 4;
+      const avgAcousticNaturalness = avg("acousticNaturalness");
+      const avgPerceivedNaturalness = avg("perceivedNaturalness");
+      const avgSemanticClarity = avg("semanticClarity");
+      const avgConversationalUsefulness = avg("conversationalUsefulness");
+
+      // 4指標の平均を 1-5 → 0-1 に正規化
+      const averageScore =
+        ((avgAcousticNaturalness + avgPerceivedNaturalness + avgSemanticClarity + avgConversationalUsefulness) / 4 - 1) / 4;
       const totalScore = 0.5 * successRate + 0.5 * averageScore;
 
       return {
         modelId: model.id,
         modelName: model.name,
         successRate: Math.round(successRate * 1000) / 1000,
-        avgNaturalness: Math.round(avgNaturalness * 100) / 100,
-        avgAudioQuality: Math.round(avgAudioQuality * 100) / 100,
+        avgAcousticNaturalness: Math.round(avgAcousticNaturalness * 100) / 100,
+        avgPerceivedNaturalness: Math.round(avgPerceivedNaturalness * 100) / 100,
+        avgSemanticClarity: Math.round(avgSemanticClarity * 100) / 100,
+        avgConversationalUsefulness: Math.round(avgConversationalUsefulness * 100) / 100,
         totalScore: Math.round(totalScore * 1000) / 1000,
         totalTrials,
+        filteredTrials,
       };
     })
     .sort((a, b) => b.totalScore - a.totalScore);

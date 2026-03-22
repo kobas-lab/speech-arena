@@ -91,43 +91,56 @@ export function LeaderboardTable() {
       )}
 
       {!loading && !error && entries.length > 0 && (
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead className="w-12">順位</TableHead>
-              <TableHead>モデル</TableHead>
-              <TableHead className="text-right">スコア</TableHead>
-              <TableHead className="text-right">成功率</TableHead>
-              <TableHead className="text-right">自然さ</TableHead>
-              <TableHead className="text-right">音声品質</TableHead>
-              <TableHead className="text-right">試行数</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {entries.map((entry, i) => (
-              <TableRow key={entry.modelId}>
-                <TableCell>
-                  {i === 0 ? <Badge variant="default">1st</Badge> : i + 1}
-                </TableCell>
-                <TableCell className="font-medium">
-              <a
-                href={`https://huggingface.co/abePclWaseda/${entry.modelName}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="hover:underline"
-              >
-                {entry.modelName}
-              </a>
-            </TableCell>
-                <TableCell className="text-right">{(entry.totalScore * 100).toFixed(1)}%</TableCell>
-                <TableCell className="text-right">{(entry.successRate * 100).toFixed(1)}%</TableCell>
-                <TableCell className="text-right">{entry.avgNaturalness.toFixed(2)}</TableCell>
-                <TableCell className="text-right">{entry.avgAudioQuality.toFixed(2)}</TableCell>
-                <TableCell className="text-right">{entry.totalTrials}</TableCell>
+        <div className="overflow-x-auto">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead className="w-12">順位</TableHead>
+                <TableHead>モデル</TableHead>
+                <TableHead className="text-right">スコア</TableHead>
+                <TableHead className="text-right">成功率</TableHead>
+                <TableHead className="text-right">音声自然性</TableHead>
+                <TableHead className="text-right">聴感自然性</TableHead>
+                <TableHead className="text-right">意味理解性</TableHead>
+                <TableHead className="text-right">対話有用性</TableHead>
+                <TableHead className="text-right">試行数</TableHead>
               </TableRow>
-            ))}
-          </TableBody>
-        </Table>
+            </TableHeader>
+            <TableBody>
+              {entries.map((entry, i) => (
+                <TableRow key={entry.modelId}>
+                  <TableCell>
+                    {i === 0 ? <Badge variant="default">1st</Badge> : i + 1}
+                  </TableCell>
+                  <TableCell className="font-medium">
+                    <a
+                      href={`https://huggingface.co/abePclWaseda/${entry.modelName}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="hover:underline"
+                    >
+                      {entry.modelName}
+                    </a>
+                  </TableCell>
+                  <TableCell className="text-right">{(entry.totalScore * 100).toFixed(1)}%</TableCell>
+                  <TableCell className="text-right">{(entry.successRate * 100).toFixed(1)}%</TableCell>
+                  <TableCell className="text-right">{entry.avgAcousticNaturalness.toFixed(2)}</TableCell>
+                  <TableCell className="text-right">{entry.avgPerceivedNaturalness.toFixed(2)}</TableCell>
+                  <TableCell className="text-right">{entry.avgSemanticClarity.toFixed(2)}</TableCell>
+                  <TableCell className="text-right">{entry.avgConversationalUsefulness.toFixed(2)}</TableCell>
+                  <TableCell className="text-right">
+                    {entry.filteredTrials}
+                    {entry.filteredTrials < entry.totalTrials && (
+                      <span className="text-xs text-muted-foreground ml-1">
+                        / {entry.totalTrials}
+                      </span>
+                    )}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
       )}
     </div>
   );

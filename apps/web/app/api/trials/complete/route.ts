@@ -16,7 +16,15 @@ export async function POST(request: Request) {
     );
   }
 
-  const { trialId, outcome, naturalness, audioQuality } = parsed.data;
+  const {
+    trialId,
+    outcome,
+    acousticNaturalness,
+    perceivedNaturalness,
+    semanticClarity,
+    conversationalUsefulness,
+    hasPacketLoss,
+  } = parsed.data;
 
   const trial = await prisma.trial.findUnique({
     where: { id: trialId },
@@ -40,8 +48,11 @@ export async function POST(request: Request) {
     where: { id: trialId },
     data: {
       outcome,
-      naturalness,
-      audioQuality,
+      acousticNaturalness,
+      perceivedNaturalness,
+      semanticClarity,
+      conversationalUsefulness,
+      hasPacketLoss,
       endedAt: new Date(),
     },
   });
@@ -49,8 +60,11 @@ export async function POST(request: Request) {
   const responseBody: CompleteTrialResponse = {
     trialId: updated.id,
     outcome: updated.outcome!,
-    naturalness: updated.naturalness!,
-    audioQuality: updated.audioQuality!,
+    acousticNaturalness: updated.acousticNaturalness!,
+    perceivedNaturalness: updated.perceivedNaturalness!,
+    semanticClarity: updated.semanticClarity!,
+    conversationalUsefulness: updated.conversationalUsefulness!,
+    hasPacketLoss: updated.hasPacketLoss!,
   };
 
   return NextResponse.json(responseBody);

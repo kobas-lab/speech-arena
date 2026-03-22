@@ -17,8 +17,11 @@ export interface CompletedTrial {
   armIndex: number;
   trialIndex: number;
   outcome: "SUCCESS" | "FAILURE";
-  naturalness: number;
-  audioQuality: number;
+  acousticNaturalness: number;
+  perceivedNaturalness: number;
+  semanticClarity: number;
+  conversationalUsefulness: number;
+  hasPacketLoss: boolean;
 }
 
 export interface WizardState {
