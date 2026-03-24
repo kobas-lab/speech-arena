@@ -2,7 +2,7 @@
   "crons": [
     {
       "path": "/api/matchups/cleanup",
-      "schedule": "0 * * * *"
+      "schedule": "0 0 * * *"
     }
   ]
 }
