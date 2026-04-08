@@ -45,3 +45,40 @@ variable "hf_token" {
   type        = string
   sensitive   = true
 }
+
+variable "ssh_key_name" {
+  description = "EC2 key pair name for GPU instance SSH access"
+  type        = string
+  default     = ""
+}
+
+variable "spot_max_price" {
+  description = "Max hourly price for Spot GPU instances"
+  type        = string
+  default     = "0.50"
+}
+
+variable "github_oauth_token" {
+  description = "GitHub personal access token for Amplify"
+  type        = string
+  sensitive   = true
+  default     = ""
+}
+
+variable "session_timeout_minutes" {
+  description = "Minutes before auto-terminating idle GPU instances"
+  type        = number
+  default     = 15
+}
+
+variable "model_repo_a" {
+  description = "HuggingFace repo for model A"
+  type        = string
+  default     = "abePclWaseda/llm-jp-moshi-v1"
+}
+
+variable "model_repo_b" {
+  description = "HuggingFace repo for model B"
+  type        = string
+  default     = "abePclWaseda/llm-jp-moshi-v1.1-vb-pseudo"
+}

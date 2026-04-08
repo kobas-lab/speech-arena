@@ -29,7 +29,12 @@ resource "aws_iam_role_policy" "lambda_orchestrator" {
           "ec2:RunInstances",
           "ec2:TerminateInstances",
           "ec2:DescribeInstances",
+          "ec2:DescribeSubnets",
+          "ec2:DescribeSecurityGroups",
+          "ec2:DescribeImages",
           "ec2:CreateTags",
+          "ec2:RequestSpotInstances",
+          "ec2:CreateFleet",
         ]
         Resource = "*"
       },
