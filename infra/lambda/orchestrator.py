@@ -13,12 +13,14 @@ class DecimalEncoder(json.JSONEncoder):
         return super().default(o)
 
 ec2 = boto3.client("ec2")
+ec2_seoul = boto3.client("ec2", region_name="ap-northeast-2")
 dynamodb = boto3.resource("dynamodb")
 
 TABLE_NAME = os.environ["DYNAMODB_TABLE"]
 LAUNCH_TEMPLATE_ID = os.environ["LAUNCH_TEMPLATE_ID"]
 SUBNET_IDS = os.environ["SUBNET_IDS"].split(",")
 SESSION_TIMEOUT_MINUTES = int(os.environ.get("SESSION_TIMEOUT_MINUTES", "15"))
+SECURITY_GROUP_GPU_ID = os.environ.get("SECURITY_GROUP_GPU_ID", "")
 
 table = dynamodb.Table(TABLE_NAME)
 
@@ -112,6 +114,20 @@ def _launch_gpu(event):
                 last_error = e
                 print(f"On-demand {instance_types[0]} in {subnet_id} failed: {e}")
                 continue
+
+    # 東京が全滅 → ソウルリージョンにフォールバック
+    if run_response is None:
+        run_response, launched_region = _try_seoul(session_id, model_repo, moshi_port, instance_types)
+        if run_response:
+            # ソウルで起動した場合、cleanup 用にリージョン情報を記録
+            instance_id = run_response["Instances"][0]["InstanceId"]
+            table.update_item(
+                Key={"sessionId": session_id},
+                UpdateExpression="SET instanceId = :iid, #r = :r",
+                ExpressionAttributeNames={"#r": "region"},
+                ExpressionAttributeValues={":iid": instance_id, ":r": "ap-northeast-2"},
+            )
+            return {"instanceId": instance_id, "region": "ap-northeast-2"}
 
     if run_response is None:
         table.update_item(
@@ -212,7 +228,9 @@ def cleanup_handler(event, context):
             instance_id = item.get("instanceId")
             if instance_id:
                 try:
-                    ec2.terminate_instances(InstanceIds=[instance_id])
+                    region = item.get("region", "ap-northeast-1")
+                    ec2_client = ec2 if region == "ap-northeast-1" else boto3.client("ec2", region_name=region)
+                    ec2_client.terminate_instances(InstanceIds=[instance_id])
                     table.update_item(
                         Key={"sessionId": item["sessionId"]},
                         UpdateExpression="SET #s = :s, terminatedAt = :t",
@@ -227,6 +245,110 @@ def cleanup_handler(event, context):
                     print(f"Failed to terminate {instance_id}: {e}")
 
     return {"terminated": terminated}
+
+
+def _try_seoul(session_id, model_repo, moshi_port, instance_types):
+    """ソウルリージョン (ap-northeast-2) で GPU 起動を試行"""
+    print("Trying Seoul region (ap-northeast-2)...")
+
+    # ソウルのデフォルト VPC のサブネットを取得
+    try:
+        seoul_vpcs = ec2_seoul.describe_vpcs(Filters=[{"Name": "isDefault", "Values": ["true"]}])
+        if not seoul_vpcs["Vpcs"]:
+            print("No default VPC in Seoul")
+            return None, None
+        seoul_vpc_id = seoul_vpcs["Vpcs"][0]["VpcId"]
+
+        seoul_subnets = ec2_seoul.describe_subnets(
+            Filters=[{"Name": "vpc-id", "Values": [seoul_vpc_id]}]
+        )
+        seoul_subnet_ids = [s["SubnetId"] for s in seoul_subnets["Subnets"]]
+    except Exception as e:
+        print(f"Failed to get Seoul subnets: {e}")
+        return None, None
+
+    # ソウルにセキュリティグループを作成（または既存を取得）
+    sg_name = "speech-arena-gpu-seoul"
+    try:
+        sg_result = ec2_seoul.describe_security_groups(
+            Filters=[{"Name": "group-name", "Values": [sg_name]}]
+        )
+        if sg_result["SecurityGroups"]:
+            seoul_sg_id = sg_result["SecurityGroups"][0]["GroupId"]
+        else:
+            sg = ec2_seoul.create_security_group(
+                GroupName=sg_name,
+                Description="SpeechArena GPU instances (Seoul)",
+                VpcId=seoul_vpc_id,
+            )
+            seoul_sg_id = sg["GroupId"]
+            ec2_seoul.authorize_security_group_ingress(
+                GroupId=seoul_sg_id,
+                IpPermissions=[
+                    {"IpProtocol": "tcp", "FromPort": 8998, "ToPort": 8999,
+                     "IpRanges": [{"CidrIp": "0.0.0.0/0"}]},
+                    {"IpProtocol": "tcp", "FromPort": 22, "ToPort": 22,
+                     "IpRanges": [{"CidrIp": "0.0.0.0/0"}]},
+                ],
+            )
+    except Exception as e:
+        print(f"Failed to setup Seoul SG: {e}")
+        return None, None
+
+    # ソウルの Deep Learning AMI を取得
+    try:
+        ami_result = ec2_seoul.describe_images(
+            Owners=["amazon"],
+            Filters=[
+                {"Name": "name", "Values": ["Deep Learning Base OSS Nvidia Driver GPU AMI (Ubuntu 22.04) *"]},
+                {"Name": "architecture", "Values": ["x86_64"]},
+            ],
+        )
+        if not ami_result["Images"]:
+            print("No Deep Learning AMI found in Seoul")
+            return None, None
+        seoul_ami = sorted(ami_result["Images"], key=lambda x: x["CreationDate"], reverse=True)[0]["ImageId"]
+    except Exception as e:
+        print(f"Failed to get Seoul AMI: {e}")
+        return None, None
+
+    # ソウルで起動試行
+    seoul_instance_types = ["g6.xlarge", "g5.xlarge"]
+    for inst_type in seoul_instance_types:
+        for subnet_id in seoul_subnet_ids:
+            try:
+                run_response = ec2_seoul.run_instances(
+                    ImageId=seoul_ami,
+                    InstanceType=inst_type,
+                    MinCount=1,
+                    MaxCount=1,
+                    SubnetId=subnet_id,
+                    SecurityGroupIds=[seoul_sg_id],
+                    IamInstanceProfile={"Arn": os.environ.get("GPU_INSTANCE_PROFILE_ARN", "")},
+                    InstanceMarketOptions={
+                        "MarketType": "spot",
+                        "SpotOptions": {"SpotInstanceType": "one-time", "MaxPrice": "0.60"},
+                    },
+                    UserData=_build_userdata_override(session_id, model_repo, moshi_port),
+                    TagSpecifications=[
+                        {
+                            "ResourceType": "instance",
+                            "Tags": [
+                                {"Key": "Name", "Value": f"speech-arena-gpu-{session_id}"},
+                                {"Key": "SessionId", "Value": session_id},
+                                {"Key": "Project", "Value": "speech-arena"},
+                                {"Key": "Region", "Value": "ap-northeast-2"},
+                            ],
+                        }
+                    ],
+                )
+                print(f"Seoul success: {inst_type} in {subnet_id}")
+                return run_response, "ap-northeast-2"
+            except Exception as e:
+                print(f"Seoul {inst_type} in {subnet_id} failed: {e}")
+                continue
+
+    return None, None
 
 
 def _build_userdata_override(session_id, model_repo, port):

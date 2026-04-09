@@ -4,17 +4,19 @@ resource "aws_lambda_function" "orchestrator" {
   role             = aws_iam_role.lambda_orchestrator.arn
   handler          = "orchestrator.handler"
   runtime          = "python3.12"
-  timeout          = 120
+  timeout          = 300
   memory_size      = 256
   filename         = "${path.module}/lambda/orchestrator.zip"
   source_code_hash = filebase64sha256("${path.module}/lambda/orchestrator.zip")
 
   environment {
     variables = {
-      DYNAMODB_TABLE          = aws_dynamodb_table.sessions.name
-      LAUNCH_TEMPLATE_ID      = aws_launch_template.gpu.id
-      SUBNET_IDS              = join(",", data.aws_subnets.default.ids)
-      SESSION_TIMEOUT_MINUTES = tostring(var.session_timeout_minutes)
+      DYNAMODB_TABLE            = aws_dynamodb_table.sessions.name
+      LAUNCH_TEMPLATE_ID        = aws_launch_template.gpu.id
+      SUBNET_IDS                = join(",", data.aws_subnets.default.ids)
+      SESSION_TIMEOUT_MINUTES   = tostring(var.session_timeout_minutes)
+      SECURITY_GROUP_GPU_ID     = aws_security_group.gpu.id
+      GPU_INSTANCE_PROFILE_ARN  = aws_iam_instance_profile.gpu_instance.arn
     }
   }
 }
@@ -32,10 +34,12 @@ resource "aws_lambda_function" "cleanup" {
 
   environment {
     variables = {
-      DYNAMODB_TABLE          = aws_dynamodb_table.sessions.name
-      LAUNCH_TEMPLATE_ID      = aws_launch_template.gpu.id
-      SUBNET_IDS              = join(",", data.aws_subnets.default.ids)
-      SESSION_TIMEOUT_MINUTES = tostring(var.session_timeout_minutes)
+      DYNAMODB_TABLE            = aws_dynamodb_table.sessions.name
+      LAUNCH_TEMPLATE_ID        = aws_launch_template.gpu.id
+      SUBNET_IDS                = join(",", data.aws_subnets.default.ids)
+      SESSION_TIMEOUT_MINUTES   = tostring(var.session_timeout_minutes)
+      SECURITY_GROUP_GPU_ID     = aws_security_group.gpu.id
+      GPU_INSTANCE_PROFILE_ARN  = aws_iam_instance_profile.gpu_instance.arn
     }
   }
 }
