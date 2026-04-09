@@ -43,9 +43,9 @@ docker run -d --gpus all \
   $ECR_REPO_URL:latest \
   uv run -m moshi.server --hf-repo $MODEL_REPO --port $MOSHI_PORT --host 0.0.0.0
 
-# DynamoDB を "running" に更新
+# DynamoDB を "running" に更新（DynamoDB は常に ap-northeast-1）
 aws dynamodb update-item \
-  --region $AWS_REGION \
+  --region ap-northeast-1 \
   --table-name $DYNAMODB_TABLE \
   --key "{\"sessionId\": {\"S\": \"$SESSION_ID\"}}" \
   --update-expression "SET #s = :s, publicIp = :ip, instanceId = :iid, startedAt = :t" \

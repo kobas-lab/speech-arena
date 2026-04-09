@@ -17,6 +17,7 @@ resource "aws_lambda_function" "orchestrator" {
       SESSION_TIMEOUT_MINUTES   = tostring(var.session_timeout_minutes)
       SECURITY_GROUP_GPU_ID     = aws_security_group.gpu.id
       GPU_INSTANCE_PROFILE_ARN  = aws_iam_instance_profile.gpu_instance.arn
+      HF_TOKEN                  = var.hf_token
     }
   }
 }

@@ -331,11 +331,15 @@ def _try_remote_region(region, session_id, model_repo, moshi_port):
                     MaxCount=1,
                     SubnetId=subnet_id,
                     SecurityGroupIds=[sg_id],
+                    IamInstanceProfile={"Name": "speech-arena-gpu-instance"},
                     InstanceMarketOptions={
                         "MarketType": "spot",
                         "SpotOptions": {"SpotInstanceType": "one-time", "MaxPrice": "0.60"},
                     },
-                    UserData=_build_userdata_override(session_id, model_repo, moshi_port),
+                    UserData=_build_userdata_override(
+                        session_id, model_repo, moshi_port,
+                        region=region, ecr_repo_url=ecr_repo_url,
+                    ),
                     TagSpecifications=[
                         {
                             "ResourceType": "instance",
@@ -357,16 +361,69 @@ def _try_remote_region(region, session_id, model_repo, moshi_port):
     return None, None
 
 
-def _build_userdata_override(session_id, model_repo, port):
-    """ローンチテンプレートの user_data に環境変数を追加"""
-    import base64
+def _build_userdata_override(session_id, model_repo, port, region=None, ecr_repo_url=None):
+    """user data スクリプトを生成（boto3 が自動で base64 エンコードするので生テキストを返す）"""
+    hf_token = os.environ.get("HF_TOKEN", "")
+    dynamodb_table = TABLE_NAME
 
-    script = f"""#!/bin/bash
+    if region and ecr_repo_url:
+        # リモートリージョン用: 完全な起動スクリプト
+        script = f"""#!/bin/bash
+set -euxo pipefail
+
+ECR_REPO_URL="{ecr_repo_url}"
+HF_TOKEN="{hf_token}"
+SESSION_ID="{session_id}"
+MODEL_REPO="{model_repo}"
+MOSHI_PORT="{port}"
+
+# IMDSv2
+TOKEN=$(curl -s -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 21600")
+INSTANCE_ID=$(curl -s -H "X-aws-ec2-metadata-token: $TOKEN" http://169.254.169.254/latest/meta-data/instance-id)
+PUBLIC_IP=$(curl -s -H "X-aws-ec2-metadata-token: $TOKEN" http://169.254.169.254/latest/meta-data/public-ipv4)
+
+# nvidia-container-toolkit
+if ! command -v nvidia-container-runtime &> /dev/null; then
+  curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey | gpg --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg
+  curl -s -L https://nvidia.github.io/libnvidia-container/stable/deb/nvidia-container-toolkit.list | \\
+    sed 's#deb https://#deb [signed-by=/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg] https://#g' | \\
+    tee /etc/apt/sources.list.d/nvidia-container-toolkit.list
+  apt-get update && apt-get install -y nvidia-container-toolkit
+  nvidia-ctk runtime configure --runtime=docker
+  systemctl restart docker
+fi
+
+# ECR ログイン
+aws ecr get-login-password --region {region} | docker login --username AWS --password-stdin $ECR_REPO_URL
+
+# Docker pull & run
+docker pull $ECR_REPO_URL:latest
+docker run -d --gpus all --name moshi-server \\
+  -p $MOSHI_PORT:$MOSHI_PORT \\
+  -e HF_TOKEN=$HF_TOKEN \\
+  $ECR_REPO_URL:latest \\
+  uv run -m moshi.server --hf-repo $MODEL_REPO --port $MOSHI_PORT --host 0.0.0.0
+
+# DynamoDB 更新（常に ap-northeast-1）
+aws dynamodb update-item \\
+  --region ap-northeast-1 \\
+  --table-name {dynamodb_table} \\
+  --key '{{"sessionId": {{"S": "'$SESSION_ID'"}}}}'  \\
+  --update-expression "SET #s = :s, publicIp = :ip, instanceId = :iid, startedAt = :t" \\
+  --expression-attribute-names '{{"#s": "status"}}' \\
+  --expression-attribute-values '{{":s": {{"S": "running"}}, ":ip": {{"S": "'$PUBLIC_IP'"}}, ":iid": {{"S": "'$INSTANCE_ID'"}}, ":t": {{"S": "'$(date -u +%Y-%m-%dT%H:%M:%SZ)'"}}}}'
+
+# 安全装置: 30分後に自動シャットダウン
+(sleep 1800 && shutdown -h now) &
+"""
+    else:
+        # 東京用: Launch Template の user data を上書きする環境変数のみ
+        script = f"""#!/bin/bash
 export SESSION_ID="{session_id}"
 export MODEL_REPO="{model_repo}"
 export MOSHI_PORT="{port}"
 """
-    return base64.b64encode(script.encode()).decode()
+    return script
 
 
 def response(status_code, body):
