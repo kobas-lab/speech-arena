@@ -15,6 +15,7 @@ resource "aws_amplify_app" "web" {
             preBuild:
               commands:
                 - npm ci
+                - npx prisma generate
             build:
               commands:
                 - npm run build
