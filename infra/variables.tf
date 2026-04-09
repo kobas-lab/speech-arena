@@ -82,3 +82,15 @@ variable "model_repo_b" {
   type        = string
   default     = "abePclWaseda/llm-jp-moshi-v1.1-vb-pseudo"
 }
+
+variable "database_url" {
+  description = "Supabase PgBouncer connection URL"
+  type        = string
+  sensitive   = true
+}
+
+variable "direct_url" {
+  description = "Supabase direct connection URL"
+  type        = string
+  sensitive   = true
+}

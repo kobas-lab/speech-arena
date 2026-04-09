@@ -29,8 +29,11 @@ resource "aws_amplify_app" "web" {
   EOT
 
   environment_variables = {
-    API_ENDPOINT              = aws_apigatewayv2_api.main.api_endpoint
-    AMPLIFY_MONOREPO_APP_ROOT = "apps/web"
+    AMPLIFY_MONOREPO_APP_ROOT  = "apps/web"
+    DATABASE_URL               = var.database_url
+    DIRECT_URL                 = var.direct_url
+    GPU_API_ENDPOINT           = aws_apigatewayv2_api.main.api_endpoint
+    NEXT_PUBLIC_GPU_API_ENDPOINT = aws_apigatewayv2_api.main.api_endpoint
   }
 }
 

@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/src/lib/prisma";
 import type { CreateMatchupResponse } from "@/src/lib/validations/matchup";
 
+const GPU_API_ENDPOINT = process.env.GPU_API_ENDPOINT || "";
+
 export async function POST() {
   try {
     const activeModels = await prisma.model.findMany({
@@ -32,6 +34,21 @@ export async function POST() {
       return { worker, matchup, armA, armB };
     });
 
+    // AWS GPU モードが設定されている場合、GPU セッションを起動
+    let gpuSessionIds: { a?: string; b?: string } = {};
+    if (GPU_API_ENDPOINT) {
+      try {
+        const [sessionA, sessionB] = await Promise.all([
+          startGpuSession(GPU_API_ENDPOINT, modelA.name, 8998),
+          startGpuSession(GPU_API_ENDPOINT, modelB.name, 8999),
+        ]);
+        gpuSessionIds = { a: sessionA.sessionId, b: sessionB.sessionId };
+      } catch (e) {
+        console.error("Failed to start GPU sessions:", e);
+        // GPU 起動失敗時は従来の endpointUrl にフォールバック
+      }
+    }
+
     const body: CreateMatchupResponse = {
       matchupId: result.matchup.id,
       workerId: result.worker.id,
@@ -41,12 +58,14 @@ export async function POST() {
           slot: "A",
           endpointUrl: modelA.endpointUrl,
           trialsRequired: result.armA.trialsRequired,
+          ...(gpuSessionIds.a && { gpuSessionId: gpuSessionIds.a }),
         },
         {
           armId: result.armB.id,
           slot: "B",
           endpointUrl: modelB.endpointUrl,
           trialsRequired: result.armB.trialsRequired,
+          ...(gpuSessionIds.b && { gpuSessionId: gpuSessionIds.b }),
         },
       ],
     };
@@ -59,4 +78,16 @@ export async function POST() {
       { status: 500 }
     );
   }
+}
+
+async function startGpuSession(apiEndpoint: string, modelName: string, port: number) {
+  // モデル名から HuggingFace リポジトリ名を生成
+  const modelRepo = `abePclWaseda/${modelName}`;
+  const res = await fetch(`${apiEndpoint}/sessions`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ modelRepo, port }),
+  });
+  if (!res.ok) throw new Error(`GPU session start failed: ${res.status}`);
+  return res.json();
 }

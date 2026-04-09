@@ -1,30 +1,72 @@
 "use client";
 
-import { useReducer } from "react";
+import { useReducer, useState } from "react";
 import { toast } from "sonner";
 import { wizardReducer, initialState } from "./wizard-reducer";
 import { WelcomeStep } from "./steps/welcome-step";
 import { TrialStep } from "./steps/trial-step";
 import { VoteStep } from "./steps/vote-step";
 import { CompleteStep } from "./steps/complete-step";
+import { GpuWaitingStep } from "./steps/gpu-waiting-step";
 import * as api from "@/src/lib/api";
+import { waitForGpuReady } from "@/src/lib/gpu-session";
 
 export function EvaluationWizard() {
   const [state, dispatch] = useReducer(wizardReducer, initialState);
+  const [gpuWaiting, setGpuWaiting] = useState(false);
+  const [gpuProgress, setGpuProgress] = useState("");
 
   const handleStart = async () => {
     dispatch({ type: "SET_LOADING", payload: true });
     try {
       const data = await api.createMatchup();
-      dispatch({
-        type: "MATCHUP_CREATED",
-        payload: {
-          matchupId: data.matchupId,
-          workerId: data.workerId,
-          arms: data.arms,
-        },
-      });
+
+      // GPU セッションがある場合はポーリングで待つ
+      const hasGpu = data.arms.some((arm) => arm.gpuSessionId);
+      if (hasGpu) {
+        setGpuWaiting(true);
+        setGpuProgress("GPU を起動中...");
+
+        // 両方の GPU セッションが running になるのを待つ
+        const gpuArms = await Promise.all(
+          data.arms.map(async (arm) => {
+            if (!arm.gpuSessionId) return arm;
+            try {
+              const session = await waitForGpuReady(
+                arm.gpuSessionId,
+                (msg) => setGpuProgress(msg),
+              );
+              return {
+                ...arm,
+                endpointUrl: `http://${session.publicIp}:${session.port || 8998}`,
+              };
+            } catch {
+              return arm; // フォールバック: 元の endpointUrl を使う
+            }
+          })
+        );
+
+        setGpuWaiting(false);
+        dispatch({
+          type: "MATCHUP_CREATED",
+          payload: {
+            matchupId: data.matchupId,
+            workerId: data.workerId,
+            arms: gpuArms,
+          },
+        });
+      } else {
+        dispatch({
+          type: "MATCHUP_CREATED",
+          payload: {
+            matchupId: data.matchupId,
+            workerId: data.workerId,
+            arms: data.arms,
+          },
+        });
+      }
     } catch (e) {
+      setGpuWaiting(false);
       const msg = e instanceof Error ? e.message : "Failed to create matchup";
       dispatch({ type: "SET_ERROR", payload: msg });
       toast.error(msg);
@@ -41,11 +83,13 @@ export function EvaluationWizard() {
         armId: arm.armId,
         trialIndex: state.currentTrialIndex,
       });
+      // GPU モードの場合は arm.endpointUrl（動的 IP）を使う
+      const endpointUrl = arm.endpointUrl || data.endpointUrl;
       dispatch({
         type: "TRIAL_STARTED",
-        payload: { trialId: data.trialId, endpointUrl: data.endpointUrl },
+        payload: { trialId: data.trialId, endpointUrl },
       });
-      window.open(data.endpointUrl, "_blank");
+      window.open(endpointUrl, "_blank");
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Failed to start trial";
       dispatch({ type: "SET_ERROR", payload: msg });
@@ -107,7 +151,10 @@ export function EvaluationWizard() {
 
   return (
     <div className="min-h-screen flex items-center justify-center p-4">
-      {state.step === "welcome" && (
+      {gpuWaiting && (
+        <GpuWaitingStep progress={gpuProgress} />
+      )}
+      {!gpuWaiting && state.step === "welcome" && (
         <WelcomeStep onStart={handleStart} isLoading={state.isLoading} />
       )}
       {state.step === "trial" && (
