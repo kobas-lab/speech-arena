@@ -12,6 +12,13 @@ export function GpuWaitingStep({ progress }: GpuWaitingStepProps) {
   return (
     <Card className="mx-auto max-w-2xl">
       <CardHeader className="text-center">
+        <Image
+          src="/icon.png"
+          alt="Speech Arena"
+          width={120}
+          height={120}
+          className="mx-auto rounded-2xl"
+        />
         <CardTitle className="text-2xl">Speech Arena</CardTitle>
         <CardDescription>
           音声対話モデルを準備しています

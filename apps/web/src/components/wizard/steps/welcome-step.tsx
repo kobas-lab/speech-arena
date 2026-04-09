@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { Button } from "@/src/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/src/components/ui/card";
 
@@ -12,6 +13,13 @@ export function WelcomeStep({ onStart, isLoading }: WelcomeStepProps) {
   return (
     <Card className="mx-auto max-w-lg">
       <CardHeader className="text-center">
+        <Image
+          src="/icon.png"
+          alt="Speech Arena"
+          width={120}
+          height={120}
+          className="mx-auto rounded-2xl"
+        />
         <CardTitle className="text-2xl">Speech Arena</CardTitle>
         <CardDescription>
           2つの音声対話システムを比較して評価してください。
