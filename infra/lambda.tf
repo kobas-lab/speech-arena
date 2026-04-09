@@ -4,7 +4,7 @@ resource "aws_lambda_function" "orchestrator" {
   role             = aws_iam_role.lambda_orchestrator.arn
   handler          = "orchestrator.handler"
   runtime          = "python3.12"
-  timeout          = 30
+  timeout          = 120
   memory_size      = 256
   filename         = "${path.module}/lambda/orchestrator.zip"
   source_code_hash = filebase64sha256("${path.module}/lambda/orchestrator.zip")

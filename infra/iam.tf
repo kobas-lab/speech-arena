@@ -62,6 +62,11 @@ resource "aws_iam_role_policy" "lambda_orchestrator" {
         ]
         Resource = "arn:aws:logs:*:*:*"
       },
+      {
+        Effect   = "Allow"
+        Action   = "lambda:InvokeFunction"
+        Resource = "arn:aws:lambda:*:*:function:${var.project_name}-*"
+      },
     ]
   })
 }
