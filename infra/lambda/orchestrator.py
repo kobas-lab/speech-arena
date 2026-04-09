@@ -13,8 +13,10 @@ class DecimalEncoder(json.JSONEncoder):
         return super().default(o)
 
 ec2 = boto3.client("ec2")
-ec2_seoul = boto3.client("ec2", region_name="ap-northeast-2")
 dynamodb = boto3.resource("dynamodb")
+
+# フォールバックリージョン（優先順）
+FALLBACK_REGIONS = ["us-east-1", "ap-northeast-2"]
 
 TABLE_NAME = os.environ["DYNAMODB_TABLE"]
 LAUNCH_TEMPLATE_ID = os.environ["LAUNCH_TEMPLATE_ID"]
@@ -115,19 +117,22 @@ def _launch_gpu(event):
                 print(f"On-demand {instance_types[0]} in {subnet_id} failed: {e}")
                 continue
 
-    # 東京が全滅 → ソウルリージョンにフォールバック
+    # 東京が全滅 → フォールバックリージョンを順に試行
     if run_response is None:
-        run_response, launched_region = _try_seoul(session_id, model_repo, moshi_port, instance_types)
-        if run_response:
-            # ソウルで起動した場合、cleanup 用にリージョン情報を記録
-            instance_id = run_response["Instances"][0]["InstanceId"]
-            table.update_item(
-                Key={"sessionId": session_id},
-                UpdateExpression="SET instanceId = :iid, #r = :r",
-                ExpressionAttributeNames={"#r": "region"},
-                ExpressionAttributeValues={":iid": instance_id, ":r": "ap-northeast-2"},
+        for fallback_region in FALLBACK_REGIONS:
+            run_response, launched_region = _try_remote_region(
+                fallback_region, session_id, model_repo, moshi_port
             )
-            return {"instanceId": instance_id, "region": "ap-northeast-2"}
+            if run_response:
+                instance_id = run_response["Instances"][0]["InstanceId"]
+                table.update_item(
+                    Key={"sessionId": session_id},
+                    UpdateExpression="SET instanceId = :iid, #r = :r",
+                    ExpressionAttributeNames={"#r": "region"},
+                    ExpressionAttributeValues={":iid": instance_id, ":r": launched_region},
+                )
+                return {"instanceId": instance_id, "region": launched_region}
+            continue
 
     if run_response is None:
         table.update_item(
@@ -247,43 +252,42 @@ def cleanup_handler(event, context):
     return {"terminated": terminated}
 
 
-def _try_seoul(session_id, model_repo, moshi_port, instance_types):
-    """ソウルリージョン (ap-northeast-2) で GPU 起動を試行"""
-    print("Trying Seoul region (ap-northeast-2)...")
+def _try_remote_region(region, session_id, model_repo, moshi_port):
+    """リモートリージョンで GPU 起動を試行"""
+    print(f"Trying region {region}...")
+    remote_ec2 = boto3.client("ec2", region_name=region)
 
-    # ソウルのデフォルト VPC のサブネットを取得
+    # デフォルト VPC のサブネットを取得
     try:
-        seoul_vpcs = ec2_seoul.describe_vpcs(Filters=[{"Name": "isDefault", "Values": ["true"]}])
-        if not seoul_vpcs["Vpcs"]:
-            print("No default VPC in Seoul")
+        vpcs = remote_ec2.describe_vpcs(Filters=[{"Name": "isDefault", "Values": ["true"]}])
+        if not vpcs["Vpcs"]:
+            print(f"No default VPC in {region}")
             return None, None
-        seoul_vpc_id = seoul_vpcs["Vpcs"][0]["VpcId"]
+        vpc_id = vpcs["Vpcs"][0]["VpcId"]
 
-        seoul_subnets = ec2_seoul.describe_subnets(
-            Filters=[{"Name": "vpc-id", "Values": [seoul_vpc_id]}]
-        )
-        seoul_subnet_ids = [s["SubnetId"] for s in seoul_subnets["Subnets"]]
+        subnets = remote_ec2.describe_subnets(Filters=[{"Name": "vpc-id", "Values": [vpc_id]}])
+        subnet_ids = [s["SubnetId"] for s in subnets["Subnets"]]
     except Exception as e:
-        print(f"Failed to get Seoul subnets: {e}")
+        print(f"Failed to get {region} subnets: {e}")
         return None, None
 
-    # ソウルにセキュリティグループを作成（または既存を取得）
-    sg_name = "speech-arena-gpu-seoul"
+    # セキュリティグループを作成（または既存を取得）
+    sg_name = f"speech-arena-gpu-{region}"
     try:
-        sg_result = ec2_seoul.describe_security_groups(
+        sg_result = remote_ec2.describe_security_groups(
             Filters=[{"Name": "group-name", "Values": [sg_name]}]
         )
         if sg_result["SecurityGroups"]:
-            seoul_sg_id = sg_result["SecurityGroups"][0]["GroupId"]
+            sg_id = sg_result["SecurityGroups"][0]["GroupId"]
         else:
-            sg = ec2_seoul.create_security_group(
+            sg = remote_ec2.create_security_group(
                 GroupName=sg_name,
-                Description="SpeechArena GPU instances (Seoul)",
-                VpcId=seoul_vpc_id,
+                Description=f"SpeechArena GPU instances ({region})",
+                VpcId=vpc_id,
             )
-            seoul_sg_id = sg["GroupId"]
-            ec2_seoul.authorize_security_group_ingress(
-                GroupId=seoul_sg_id,
+            sg_id = sg["GroupId"]
+            remote_ec2.authorize_security_group_ingress(
+                GroupId=sg_id,
                 IpPermissions=[
                     {"IpProtocol": "tcp", "FromPort": 8998, "ToPort": 8999,
                      "IpRanges": [{"CidrIp": "0.0.0.0/0"}]},
@@ -292,12 +296,12 @@ def _try_seoul(session_id, model_repo, moshi_port, instance_types):
                 ],
             )
     except Exception as e:
-        print(f"Failed to setup Seoul SG: {e}")
+        print(f"Failed to setup {region} SG: {e}")
         return None, None
 
-    # ソウルの Deep Learning AMI を取得
+    # Deep Learning AMI を取得
     try:
-        ami_result = ec2_seoul.describe_images(
+        ami_result = remote_ec2.describe_images(
             Owners=["amazon"],
             Filters=[
                 {"Name": "name", "Values": ["Deep Learning Base OSS Nvidia Driver GPU AMI (Ubuntu 22.04) *"]},
@@ -305,26 +309,28 @@ def _try_seoul(session_id, model_repo, moshi_port, instance_types):
             ],
         )
         if not ami_result["Images"]:
-            print("No Deep Learning AMI found in Seoul")
+            print(f"No Deep Learning AMI found in {region}")
             return None, None
-        seoul_ami = sorted(ami_result["Images"], key=lambda x: x["CreationDate"], reverse=True)[0]["ImageId"]
+        ami_id = sorted(ami_result["Images"], key=lambda x: x["CreationDate"], reverse=True)[0]["ImageId"]
     except Exception as e:
-        print(f"Failed to get Seoul AMI: {e}")
+        print(f"Failed to get {region} AMI: {e}")
         return None, None
 
-    # ソウルで起動試行
-    seoul_instance_types = ["g6.xlarge", "g5.xlarge"]
-    for inst_type in seoul_instance_types:
-        for subnet_id in seoul_subnet_ids:
+    # ECR リポジトリ URL（リージョンに合わせて変更）
+    ecr_repo_url = f"518024472814.dkr.ecr.{region}.amazonaws.com/speech-arena/moshi-server"
+
+    # 起動試行
+    remote_instance_types = ["g6.xlarge", "g5.xlarge"]
+    for inst_type in remote_instance_types:
+        for subnet_id in subnet_ids:
             try:
-                run_response = ec2_seoul.run_instances(
-                    ImageId=seoul_ami,
+                run_response = remote_ec2.run_instances(
+                    ImageId=ami_id,
                     InstanceType=inst_type,
                     MinCount=1,
                     MaxCount=1,
                     SubnetId=subnet_id,
-                    SecurityGroupIds=[seoul_sg_id],
-                    IamInstanceProfile={"Arn": os.environ.get("GPU_INSTANCE_PROFILE_ARN", "")},
+                    SecurityGroupIds=[sg_id],
                     InstanceMarketOptions={
                         "MarketType": "spot",
                         "SpotOptions": {"SpotInstanceType": "one-time", "MaxPrice": "0.60"},
@@ -337,15 +343,15 @@ def _try_seoul(session_id, model_repo, moshi_port, instance_types):
                                 {"Key": "Name", "Value": f"speech-arena-gpu-{session_id}"},
                                 {"Key": "SessionId", "Value": session_id},
                                 {"Key": "Project", "Value": "speech-arena"},
-                                {"Key": "Region", "Value": "ap-northeast-2"},
+                                {"Key": "Region", "Value": region},
                             ],
                         }
                     ],
                 )
-                print(f"Seoul success: {inst_type} in {subnet_id}")
-                return run_response, "ap-northeast-2"
+                print(f"{region} success: {inst_type} in {subnet_id}")
+                return run_response, region
             except Exception as e:
-                print(f"Seoul {inst_type} in {subnet_id} failed: {e}")
+                print(f"{region} {inst_type} in {subnet_id} failed: {e}")
                 continue
 
     return None, None
