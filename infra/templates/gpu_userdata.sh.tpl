@@ -45,6 +45,16 @@ docker run -d --gpus all \
   $ECR_REPO_URL:latest \
   uv run -m moshi.server --hf-repo $MODEL_REPO --port $MOSHI_PORT --host 0.0.0.0
 
+# moshi.server が実際に listen するまで待つ（最大15分）
+echo "Waiting for moshi.server to be ready..."
+for i in $(seq 1 180); do
+  if curl -s -o /dev/null -w '' http://localhost:$MOSHI_PORT 2>/dev/null; then
+    echo "moshi.server is ready after $${i}0 seconds"
+    break
+  fi
+  sleep 5
+done
+
 # DynamoDB を "running" に更新（DynamoDB は常に ap-northeast-1）
 aws dynamodb update-item \
   --region ap-northeast-1 \
