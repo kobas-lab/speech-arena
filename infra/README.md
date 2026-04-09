@@ -229,9 +229,15 @@ github_oauth_token = "ghp_xxxxx"
 
 ---
 
+## 完了済み
+
+- [x] Phase 1: S3, ECR, DynamoDB, IAM のデプロイ
+- [x] Phase 2: Lambda, API Gateway, EC2 Launch Template, Amplify のデプロイ
+- [x] Amplify ビルド・デプロイ成功確認
+- [x] Docker イメージを ECR に push (`speech-arena/moshi-server:latest`)
+
 ## 今後の計画
 
-- [ ] Docker イメージを ECR に push
 - [ ] E2E テスト（API Gateway → Lambda → EC2 GPU 起動）
 - [ ] フロント統合（Next.js から API Gateway を呼び出し、1画面で対話→評価）
 - [ ] 音声録音（moshi.server → S3 保存）
