@@ -74,7 +74,6 @@ export function EvaluationWizard() {
       const results = await Promise.all(
         savedSessions.map(async (session) => {
           try {
-            // まず現在の状態を確認
             const status = await getGpuSession(session.sessionId);
             if (status.status === "running" && status.publicIp) {
               return {
@@ -82,7 +81,9 @@ export function EvaluationWizard() {
                 endpointUrl: `http://${status.publicIp}:${status.port || session.port}`,
               };
             }
-            // starting なら待つ
+            if (status.status === "failed") {
+              throw new Error("GPU セッションの起動に失敗しました");
+            }
             const ready = await waitForGpuReady(
               session.sessionId,
               (msg) => setGpuProgress(msg),
@@ -91,7 +92,8 @@ export function EvaluationWizard() {
               armIndex: session.armIndex,
               endpointUrl: `http://${ready.publicIp}:${ready.port || session.port}`,
             };
-          } catch {
+          } catch (e) {
+            toast.error(e instanceof Error ? e.message : "GPU の起動に失敗しました。ページをリロードして再度お試しください。");
             return null;
           }
         })
@@ -104,6 +106,15 @@ export function EvaluationWizard() {
             endpointUrl: result.endpointUrl,
           };
         }
+      }
+
+      // 全セッション失敗なら welcome に戻す
+      const anySuccess = results.some((r) => r !== null);
+      if (!anySuccess) {
+        clearSavedState();
+        clearGpuSessions();
+        dispatch({ type: "RESTORE_STATE", payload: { ...initialState } });
+        return;
       }
 
       // GPU 準備完了 → trial ステップへ
@@ -173,6 +184,9 @@ export function EvaluationWizard() {
         trialIndex: state.currentTrialIndex,
       });
       const endpointUrl = arm.endpointUrl || data.endpointUrl;
+      if (endpointUrl.includes("placeholder")) {
+        throw new Error("GPU が準備できていません。ページをリロードしてください。");
+      }
       dispatch({
         type: "TRIAL_STARTED",
         payload: { trialId: data.trialId, endpointUrl },
