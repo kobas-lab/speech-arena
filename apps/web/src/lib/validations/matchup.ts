@@ -9,6 +9,7 @@ export const createMatchupResponseSchema = z.object({
       slot: z.enum(["A", "B"]),
       endpointUrl: z.string(),
       trialsRequired: z.number(),
+      gpuSessionId: z.string().optional(),
     })
   ),
 });

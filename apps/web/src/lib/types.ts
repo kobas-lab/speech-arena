@@ -10,6 +10,7 @@ export interface ArmData {
   slot: "A" | "B";
   endpointUrl: string;
   trialsRequired: number;
+  gpuSessionId?: string;
 }
 
 export interface CompletedTrial {
