@@ -3,4 +3,5 @@ memo.md
 client/dist
 client-src/node_modules
 client-src/dist
+docker/moshi-server/client
 scripts/.env
