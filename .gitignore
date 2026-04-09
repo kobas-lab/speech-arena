@@ -1,4 +1,5 @@
 .vercel
+.next
 memo.md
 client/dist
 client-src/node_modules

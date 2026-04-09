@@ -60,6 +60,16 @@ export function wizardReducer(state: WizardState, action: WizardAction): WizardS
     case "SET_ERROR":
       return { ...state, error: action.payload, isLoading: false };
 
+    case "GPU_WAITING":
+      return {
+        ...state,
+        step: "gpu-waiting",
+        matchupId: action.payload.matchupId,
+        workerId: action.payload.workerId,
+        arms: action.payload.arms,
+        isLoading: false,
+      };
+
     case "MATCHUP_CREATED":
       return {
         ...state,
