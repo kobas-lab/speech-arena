@@ -1,5 +1,7 @@
 import type { WizardState, WizardAction } from "@/src/lib/types";
 
+const STORAGE_KEY = "speech-arena-wizard-state";
+
 export const initialState: WizardState = {
   step: "welcome",
   matchupId: null,
@@ -14,6 +16,41 @@ export const initialState: WizardState = {
   isLoading: false,
   error: null,
 };
+
+export function loadSavedState(): WizardState {
+  if (typeof window === "undefined") return initialState;
+  try {
+    const saved = localStorage.getItem(STORAGE_KEY);
+    if (!saved) return initialState;
+    const parsed = JSON.parse(saved) as WizardState;
+    // complete ステップは復元しない（新規評価を促す）
+    if (parsed.step === "complete" || parsed.step === "welcome") {
+      return initialState;
+    }
+    // isLoading はリセット
+    return { ...parsed, isLoading: false, error: null };
+  } catch {
+    return initialState;
+  }
+}
+
+export function saveState(state: WizardState) {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  } catch {
+    // localStorage が使えない環境では無視
+  }
+}
+
+export function clearSavedState() {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.removeItem(STORAGE_KEY);
+  } catch {
+    // ignore
+  }
+}
 
 export function wizardReducer(state: WizardState, action: WizardAction): WizardState {
   switch (action.type) {

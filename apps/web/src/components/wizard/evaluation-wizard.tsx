@@ -1,8 +1,8 @@
 "use client";
 
-import { useReducer, useState } from "react";
+import { useReducer, useState, useEffect, useCallback } from "react";
 import { toast } from "sonner";
-import { wizardReducer, initialState } from "./wizard-reducer";
+import { wizardReducer, loadSavedState, saveState, clearSavedState } from "./wizard-reducer";
 import { WelcomeStep } from "./steps/welcome-step";
 import { TrialStep } from "./steps/trial-step";
 import { VoteStep } from "./steps/vote-step";
@@ -12,7 +12,16 @@ import * as api from "@/src/lib/api";
 import { waitForGpuReady } from "@/src/lib/gpu-session";
 
 export function EvaluationWizard() {
-  const [state, dispatch] = useReducer(wizardReducer, initialState);
+  const [state, dispatch] = useReducer(wizardReducer, undefined, loadSavedState);
+
+  // state が変わるたびに localStorage に保存
+  useEffect(() => {
+    if (state.step === "complete") {
+      clearSavedState();
+    } else {
+      saveState(state);
+    }
+  }, [state]);
   const [gpuWaiting, setGpuWaiting] = useState(false);
   const [gpuProgress, setGpuProgress] = useState("");
 
