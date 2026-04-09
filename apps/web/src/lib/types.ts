@@ -47,4 +47,5 @@ export type WizardAction =
   | { type: "TRIAL_STARTED"; payload: { trialId: string; endpointUrl: string } }
   | { type: "SESSION_DONE" }
   | { type: "TRIAL_COMPLETED"; payload: CompletedTrial }
-  | { type: "VOTE_SUBMITTED" };
+  | { type: "VOTE_SUBMITTED" }
+  | { type: "RESTORE_STATE"; payload: WizardState };

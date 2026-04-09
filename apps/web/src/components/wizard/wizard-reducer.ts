@@ -136,6 +136,13 @@ export function wizardReducer(state: WizardState, action: WizardAction): WizardS
         isLoading: false,
       };
 
+    case "RESTORE_STATE":
+      return {
+        ...action.payload,
+        isLoading: false,
+        error: null,
+      };
+
     default:
       return state;
   }

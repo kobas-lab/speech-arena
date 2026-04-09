@@ -2,7 +2,7 @@
 
 import { useReducer, useState, useEffect } from "react";
 import { toast } from "sonner";
-import { wizardReducer, loadSavedState, saveState, clearSavedState } from "./wizard-reducer";
+import { wizardReducer, initialState, loadSavedState, saveState, clearSavedState } from "./wizard-reducer";
 import { WelcomeStep } from "./steps/welcome-step";
 import { TrialStep } from "./steps/trial-step";
 import { VoteStep } from "./steps/vote-step";
@@ -35,19 +35,47 @@ function clearGpuSessions() {
 }
 
 export function EvaluationWizard() {
-  const [state, dispatch] = useReducer(wizardReducer, undefined, loadSavedState);
+  const [state, dispatch] = useReducer(wizardReducer, undefined, () => initialState);
+  const [mounted, setMounted] = useState(false);
   const [gpuWaiting, setGpuWaiting] = useState(false);
   const [gpuProgress, setGpuProgress] = useState("");
 
-  // state が変わるたびに localStorage に保存
+  // クライアントマウント時に localStorage から復元
   useEffect(() => {
+    const saved = loadSavedState();
+    if (saved.step !== "welcome") {
+      // 保存された state を復元するために MATCHUP_CREATED で上書き
+      if (saved.matchupId && saved.workerId && saved.arms.length > 0) {
+        dispatch({
+          type: "MATCHUP_CREATED",
+          payload: {
+            matchupId: saved.matchupId,
+            workerId: saved.workerId,
+            arms: saved.arms,
+          },
+        });
+        // trial の進捗も復元
+        // MATCHUP_CREATED は currentArmIndex=0, currentTrialIndex=1 にリセットするので
+        // 保存された進捗を RESTORE アクションで復元
+        dispatch({
+          type: "RESTORE_STATE",
+          payload: saved,
+        });
+      }
+    }
+    setMounted(true);
+  }, []);
+
+  // state が変わるたびに localStorage に保存（マウント後のみ）
+  useEffect(() => {
+    if (!mounted) return;
     if (state.step === "complete") {
       clearSavedState();
       clearGpuSessions();
     } else {
       saveState(state);
     }
-  }, [state]);
+  }, [state, mounted]);
 
   // リロード時: 保存された GPU セッションがあればポーリングを再開
   useEffect(() => {
@@ -266,6 +294,10 @@ export function EvaluationWizard() {
       toast.error(msg);
     }
   };
+
+  if (!mounted) {
+    return <div className="min-h-screen flex items-center justify-center p-4" />;
+  }
 
   return (
     <div className="min-h-screen flex items-center justify-center p-4">
