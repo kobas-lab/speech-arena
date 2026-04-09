@@ -421,7 +421,9 @@ aws dynamodb update-item \\
   --expression-attribute-values '{{":s": {{"S": "running"}}, ":ip": {{"S": "'$PUBLIC_IP'"}}, ":iid": {{"S": "'$INSTANCE_ID'"}}, ":t": {{"S": "'$(date -u +%Y-%m-%dT%H:%M:%SZ)'"}}}}'
 
 # 安全装置: 30分後に自動シャットダウン
-(sleep 1800 && shutdown -h now) &
+# 安全装置: 30分後に自動終了（terminate）
+REGION=$(curl -s -H "X-aws-ec2-metadata-token: $TOKEN" http://169.254.169.254/latest/meta-data/placement/region)
+(sleep 1800 && aws ec2 terminate-instances --region $REGION --instance-ids $INSTANCE_ID) &
 """
     else:
         # 東京用: Launch Template の user data を上書きする環境変数のみ
