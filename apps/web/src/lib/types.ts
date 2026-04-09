@@ -2,7 +2,7 @@ export type { CreateMatchupResponse, MatchupVoteRequest, MatchupVoteResponse } f
 export type { StartTrialRequest, StartTrialResponse, CompleteTrialRequest, CompleteTrialResponse } from "./validations/trial";
 export type { LeaderboardEntry, LeaderboardResponse } from "./validations/leaderboard";
 
-export type WizardStep = "welcome" | "trial" | "vote" | "complete";
+export type WizardStep = "welcome" | "gpu-waiting" | "trial" | "vote" | "complete";
 export type TrialPhase = "ready" | "in-session" | "rating";
 
 export interface ArmData {
@@ -43,6 +43,7 @@ export interface WizardState {
 export type WizardAction =
   | { type: "SET_LOADING"; payload: boolean }
   | { type: "SET_ERROR"; payload: string | null }
+  | { type: "GPU_WAITING"; payload: { matchupId: string; workerId: string; arms: ArmData[] } }
   | { type: "MATCHUP_CREATED"; payload: { matchupId: string; workerId: string; arms: ArmData[] } }
   | { type: "TRIAL_STARTED"; payload: { trialId: string; endpointUrl: string } }
   | { type: "SESSION_DONE" }

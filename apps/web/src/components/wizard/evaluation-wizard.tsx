@@ -37,31 +37,13 @@ function clearGpuSessions() {
 export function EvaluationWizard() {
   const [state, dispatch] = useReducer(wizardReducer, undefined, () => initialState);
   const [mounted, setMounted] = useState(false);
-  const [gpuWaiting, setGpuWaiting] = useState(false);
   const [gpuProgress, setGpuProgress] = useState("");
 
   // クライアントマウント時に localStorage から復元
   useEffect(() => {
     const saved = loadSavedState();
     if (saved.step !== "welcome") {
-      // 保存された state を復元するために MATCHUP_CREATED で上書き
-      if (saved.matchupId && saved.workerId && saved.arms.length > 0) {
-        dispatch({
-          type: "MATCHUP_CREATED",
-          payload: {
-            matchupId: saved.matchupId,
-            workerId: saved.workerId,
-            arms: saved.arms,
-          },
-        });
-        // trial の進捗も復元
-        // MATCHUP_CREATED は currentArmIndex=0, currentTrialIndex=1 にリセットするので
-        // 保存された進捗を RESTORE アクションで復元
-        dispatch({
-          type: "RESTORE_STATE",
-          payload: saved,
-        });
-      }
+      dispatch({ type: "RESTORE_STATE", payload: saved });
     }
     setMounted(true);
   }, []);
@@ -72,73 +54,59 @@ export function EvaluationWizard() {
     if (state.step === "complete") {
       clearSavedState();
       clearGpuSessions();
-    } else {
+    } else if (state.step !== "welcome") {
       saveState(state);
     }
   }, [state, mounted]);
 
-  // リロード時: 保存された GPU セッションがあればポーリングを再開
+  // gpu-waiting ステップの場合、GPU ポーリングを実行
   useEffect(() => {
-    const savedSessions = loadGpuSessions();
-    if (savedSessions.length === 0 || state.step === "welcome" || state.step === "complete") return;
+    if (!mounted || state.step !== "gpu-waiting") return;
 
-    // GPU セッションが running か確認
-    async function checkGpuSessions() {
-      setGpuWaiting(true);
+    const savedSessions = loadGpuSessions();
+    if (savedSessions.length === 0) return;
+
+    async function pollGpu() {
       setGpuProgress("GPU の状態を確認中...");
 
       const updatedArms = [...state.arms];
-      let needsWait = false;
 
-      for (const session of savedSessions) {
-        try {
-          const status = await getGpuSession(session.sessionId);
-          if (status.status === "running" && status.publicIp) {
-            // 既に running → endpointUrl を更新
-            if (updatedArms[session.armIndex]) {
-              updatedArms[session.armIndex] = {
-                ...updatedArms[session.armIndex],
+      const results = await Promise.all(
+        savedSessions.map(async (session) => {
+          try {
+            // まず現在の状態を確認
+            const status = await getGpuSession(session.sessionId);
+            if (status.status === "running" && status.publicIp) {
+              return {
+                armIndex: session.armIndex,
                 endpointUrl: `http://${status.publicIp}:${status.port || session.port}`,
               };
             }
-          } else if (status.status === "starting") {
-            needsWait = true;
-          }
-        } catch {
-          // セッションが見つからない場合はスキップ
-        }
-      }
-
-      if (needsWait) {
-        // まだ starting のセッションがあればポーリング
-        const resolvedArms = await Promise.all(
-          savedSessions.map(async (session) => {
-            try {
-              const ready = await waitForGpuReady(
-                session.sessionId,
-                (msg) => setGpuProgress(msg),
-              );
-              return {
-                armIndex: session.armIndex,
-                endpointUrl: `http://${ready.publicIp}:${ready.port || session.port}`,
-              };
-            } catch {
-              return null;
-            }
-          })
-        );
-
-        for (const result of resolvedArms) {
-          if (result && updatedArms[result.armIndex]) {
-            updatedArms[result.armIndex] = {
-              ...updatedArms[result.armIndex],
-              endpointUrl: result.endpointUrl,
+            // starting なら待つ
+            const ready = await waitForGpuReady(
+              session.sessionId,
+              (msg) => setGpuProgress(msg),
+            );
+            return {
+              armIndex: session.armIndex,
+              endpointUrl: `http://${ready.publicIp}:${ready.port || session.port}`,
             };
+          } catch {
+            return null;
           }
+        })
+      );
+
+      for (const result of results) {
+        if (result && updatedArms[result.armIndex]) {
+          updatedArms[result.armIndex] = {
+            ...updatedArms[result.armIndex],
+            endpointUrl: result.endpointUrl,
+          };
         }
       }
 
-      // arms を更新して state に反映
+      // GPU 準備完了 → trial ステップへ
       if (state.matchupId && state.workerId) {
         dispatch({
           type: "MATCHUP_CREATED",
@@ -149,20 +117,17 @@ export function EvaluationWizard() {
           },
         });
       }
-
-      setGpuWaiting(false);
     }
 
-    checkGpuSessions();
+    pollGpu();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // マウント時のみ実行
+  }, [mounted, state.step]);
 
   const handleStart = async () => {
     dispatch({ type: "SET_LOADING", payload: true });
     try {
       const data = await api.createMatchup();
 
-      // GPU セッションがある場合はポーリングで待つ
       const hasGpu = data.arms.some((arm) => arm.gpuSessionId);
       if (hasGpu) {
         // GPU セッション ID を localStorage に保存
@@ -171,35 +136,13 @@ export function EvaluationWizard() {
           .filter((s): s is GpuSessionInfo => s !== null);
         saveGpuSessions(gpuSessions);
 
-        setGpuWaiting(true);
-        setGpuProgress("GPU を起動中...");
-
-        // 両方の GPU セッションが running になるのを待つ
-        const gpuArms = await Promise.all(
-          data.arms.map(async (arm, i) => {
-            if (!arm.gpuSessionId) return arm;
-            try {
-              const session = await waitForGpuReady(
-                arm.gpuSessionId,
-                (msg) => setGpuProgress(msg),
-              );
-              return {
-                ...arm,
-                endpointUrl: `http://${session.publicIp}:${session.port || 8998 + i}`,
-              };
-            } catch {
-              return arm;
-            }
-          })
-        );
-
-        setGpuWaiting(false);
+        // gpu-waiting ステップへ（useEffect でポーリング開始）
         dispatch({
-          type: "MATCHUP_CREATED",
+          type: "GPU_WAITING",
           payload: {
             matchupId: data.matchupId,
             workerId: data.workerId,
-            arms: gpuArms,
+            arms: data.arms,
           },
         });
       } else {
@@ -213,7 +156,6 @@ export function EvaluationWizard() {
         });
       }
     } catch (e) {
-      setGpuWaiting(false);
       const msg = e instanceof Error ? e.message : "Failed to create matchup";
       dispatch({ type: "SET_ERROR", payload: msg });
       toast.error(msg);
@@ -301,13 +243,13 @@ export function EvaluationWizard() {
 
   return (
     <div className="min-h-screen flex items-center justify-center p-4">
-      {gpuWaiting && (
-        <GpuWaitingStep progress={gpuProgress} />
-      )}
-      {!gpuWaiting && state.step === "welcome" && (
+      {state.step === "welcome" && (
         <WelcomeStep onStart={handleStart} isLoading={state.isLoading} />
       )}
-      {!gpuWaiting && state.step === "trial" && (
+      {state.step === "gpu-waiting" && (
+        <GpuWaitingStep progress={gpuProgress} />
+      )}
+      {state.step === "trial" && (
         <TrialStep
           arm={state.arms[state.currentArmIndex]}
           currentArmIndex={state.currentArmIndex}
@@ -321,10 +263,10 @@ export function EvaluationWizard() {
           onCompleteTrial={handleCompleteTrial}
         />
       )}
-      {!gpuWaiting && state.step === "vote" && (
+      {state.step === "vote" && (
         <VoteStep onVote={handleVote} isLoading={state.isLoading} />
       )}
-      {!gpuWaiting && state.step === "complete" && <CompleteStep />}
+      {state.step === "complete" && <CompleteStep />}
     </div>
   );
 }
