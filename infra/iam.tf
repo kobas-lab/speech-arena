@@ -49,7 +49,10 @@ resource "aws_iam_role_policy" "lambda_orchestrator" {
           "dynamodb:UpdateItem",
           "dynamodb:Query",
         ]
-        Resource = aws_dynamodb_table.sessions.arn
+        Resource = [
+          aws_dynamodb_table.sessions.arn,
+          "${aws_dynamodb_table.sessions.arn}/index/*",
+        ]
       },
       {
         Effect   = "Allow"
