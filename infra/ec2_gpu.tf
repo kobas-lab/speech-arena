@@ -98,6 +98,14 @@ resource "aws_launch_template" "gpu" {
     hf_token       = var.hf_token
   }))
 
+  block_device_mappings {
+    device_name = "/dev/sda1"
+    ebs {
+      volume_size = 100 # GB（モデル15GB + Docker イメージ + OS）
+      volume_type = "gp3"
+    }
+  }
+
   metadata_options {
     http_tokens = "required" # IMDSv2
   }

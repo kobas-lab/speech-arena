@@ -332,6 +332,11 @@ def _try_remote_region(region, session_id, model_repo, moshi_port):
                     SubnetId=subnet_id,
                     SecurityGroupIds=[sg_id],
                     IamInstanceProfile={"Name": "speech-arena-gpu-instance"},
+                    KeyName="speech-arena-gpu",
+                    BlockDeviceMappings=[{
+                        "DeviceName": "/dev/sda1",
+                        "Ebs": {"VolumeSize": 100, "VolumeType": "gp3"},
+                    }],
                     InstanceMarketOptions={
                         "MarketType": "spot",
                         "SpotOptions": {"SpotInstanceType": "one-time", "MaxPrice": "0.60"},
@@ -401,6 +406,8 @@ docker pull $ECR_REPO_URL:latest
 docker run -d --gpus all --name moshi-server \\
   -p $MOSHI_PORT:$MOSHI_PORT \\
   -e HF_TOKEN=$HF_TOKEN \\
+  -e HUGGING_FACE_HUB_TOKEN=$HF_TOKEN \\
+  -e HF_HOME=/tmp/hf_cache \\
   $ECR_REPO_URL:latest \\
   uv run -m moshi.server --hf-repo $MODEL_REPO --port $MOSHI_PORT --host 0.0.0.0
 

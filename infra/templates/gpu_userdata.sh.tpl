@@ -40,6 +40,8 @@ docker run -d --gpus all \
   --name moshi-server \
   -p $MOSHI_PORT:$MOSHI_PORT \
   -e HF_TOKEN=$HF_TOKEN \
+  -e HUGGING_FACE_HUB_TOKEN=$HF_TOKEN \
+  -e HF_HOME=/tmp/hf_cache \
   $ECR_REPO_URL:latest \
   uv run -m moshi.server --hf-repo $MODEL_REPO --port $MOSHI_PORT --host 0.0.0.0
 
