@@ -15,8 +15,8 @@ export function GpuWaitingStep({ progress }: GpuWaitingStepProps) {
         <Image
           src="/icon.png"
           alt="Speech Arena"
-          width={120}
-          height={120}
+          width={200}
+          height={200}
           className="mx-auto rounded-2xl"
         />
         <CardTitle className="text-2xl">Speech Arena</CardTitle>
