@@ -81,6 +81,38 @@ def _launch_gpu(event):
         if run_response:
             break
 
+    # Spot が全滅 → オンデマンドフォールバック
+    if run_response is None:
+        print("All Spot attempts failed. Trying on-demand fallback...")
+        for subnet_id in SUBNET_IDS:
+            try:
+                run_response = ec2.run_instances(
+                    LaunchTemplate={"LaunchTemplateId": LAUNCH_TEMPLATE_ID},
+                    MinCount=1,
+                    MaxCount=1,
+                    SubnetId=subnet_id,
+                    InstanceType=instance_types[0],  # g5.xlarge
+                    InstanceMarketOptions={},  # オンデマンド（Spot 指定を上書き）
+                    TagSpecifications=[
+                        {
+                            "ResourceType": "instance",
+                            "Tags": [
+                                {"Key": "Name", "Value": f"speech-arena-gpu-{session_id}"},
+                                {"Key": "SessionId", "Value": session_id},
+                                {"Key": "Project", "Value": "speech-arena"},
+                                {"Key": "PricingModel", "Value": "on-demand"},
+                            ],
+                        }
+                    ],
+                    UserData=_build_userdata_override(session_id, model_repo, moshi_port),
+                )
+                print(f"On-demand success: {instance_types[0]} in {subnet_id}")
+                break
+            except Exception as e:
+                last_error = e
+                print(f"On-demand {instance_types[0]} in {subnet_id} failed: {e}")
+                continue
+
     if run_response is None:
         table.update_item(
             Key={"sessionId": session_id},
