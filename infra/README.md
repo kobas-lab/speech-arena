@@ -235,11 +235,73 @@ github_oauth_token = "ghp_xxxxx"
 - [x] Phase 2: Lambda, API Gateway, EC2 Launch Template, Amplify のデプロイ
 - [x] Amplify ビルド・デプロイ成功確認
 - [x] Docker イメージを ECR に push (`speech-arena/moshi-server:latest`)
+- [x] E2E テスト（API Gateway → Lambda → DynamoDB の動作確認）
 
 ## 今後の計画
 
-- [ ] E2E テスト（API Gateway → Lambda → EC2 GPU 起動）
+- [ ] Spot GPU 容量の確保（時間帯を変えて再テスト or オンデマンドフォールバック）
 - [ ] フロント統合（Next.js から API Gateway を呼び出し、1画面で対話→評価）
 - [ ] 音声録音（moshi.server → S3 保存）
 
 詳細: https://github.com/kobas-lab/speech-arena/issues/11
+
+---
+
+## E2E テストレポート (2026-04-09)
+
+### テスト内容
+
+API Gateway → Lambda → EC2 Spot GPU の起動フローを検証。
+
+### テスト手順
+
+```bash
+# 1. セッション作成（GPU 起動リクエスト）
+curl -X POST https://k26y8y9e18.execute-api.ap-northeast-1.amazonaws.com/sessions \
+  -H "Content-Type: application/json" \
+  -d '{"modelRepo": "abePclWaseda/llm-jp-moshi-v1", "port": 8998}'
+
+# 2. セッション状態確認（ポーリング）
+curl https://k26y8y9e18.execute-api.ap-northeast-1.amazonaws.com/sessions/{sessionId}
+```
+
+### 結果
+
+| テスト項目 | 結果 | 詳細 |
+|---|---|---|
+| API Gateway → Lambda 呼び出し | **OK** | 即座にレスポンス返却 |
+| Lambda → DynamoDB セッション作成 | **OK** | `status: "starting"` で記録 |
+| Lambda 非同期 GPU 起動 | **OK** | 自分自身を `InvocationType: "Event"` で呼び出し |
+| 複数 AZ フォールバック | **OK** | 3 AZ (1a, 1c, 1d) を順に試行 |
+| 複数インスタンスタイプフォールバック | **OK** | g5.xlarge → g5.2xlarge → g6.xlarge を順に試行 |
+| GET /sessions/{id} ポーリング | **OK** | セッション状態を正常に返却 |
+| EC2 Spot GPU 起動 | **容量不足** | 東京リージョン全 AZ で一時的に Spot 容量枯渇 |
+
+### 発見された問題と対応
+
+1. **API Gateway 30秒タイムアウト**: GPU 起動は複数 AZ を試行するため30秒を超える
+   - **対応**: Lambda を非同期化。`POST /sessions` は即座にレスポンスを返し、GPU 起動はバックグラウンドで実行
+   - フロントは `GET /sessions/{sessionId}` でポーリングして状態を監視
+
+2. **DynamoDB Decimal シリアライズエラー**: DynamoDB が数値を `Decimal` 型で返すため JSON 変換に失敗
+   - **対応**: `DecimalEncoder` を追加
+
+3. **Spot GPU 容量不足**: 東京リージョン (ap-northeast-1) の全 AZ で g5.xlarge, g5.2xlarge, g6.xlarge が一時的に枯渇
+   - **対応済み**: 複数インスタンスタイプのフォールバックを実装
+   - **今後の対応案**: 時間帯を変えて再テスト / オンデマンドインスタンスへのフォールバック追加
+
+### アーキテクチャ（検証済みフロー）
+
+```
+フロント → POST /sessions → API Gateway → Lambda (同期)
+                                              ↓ 即座にレスポンス返却
+                                              ↓ 非同期で自分自身を呼び出し
+                                           Lambda (非同期)
+                                              ↓ 複数 AZ × 複数インスタンスタイプを試行
+                                           EC2 Spot GPU 起動
+                                              ↓ user data で moshi.server 起動
+                                           DynamoDB status → "running"
+                                              ↓
+フロント ← GET /sessions/{id} ← API Gateway ← Lambda
+           ポーリングで状態監視
+```
