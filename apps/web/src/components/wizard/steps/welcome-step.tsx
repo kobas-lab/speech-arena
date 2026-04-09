@@ -31,7 +31,7 @@ export function WelcomeStep({ onStart, isLoading }: WelcomeStepProps) {
           <ol className="list-decimal list-inside space-y-1">
             <li>システム A と2回会話する</li>
             <li>システム B と2回会話する</li>
-            <li>各会話について自然さと音声品質を評価する</li>
+            <li>各会話について4つの観点で評価する</li>
             <li>全体としてどちらのシステムが良かったか投票する</li>
           </ol>
           <p className="text-xs">所要時間：約10分</p>
