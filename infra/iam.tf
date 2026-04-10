@@ -116,8 +116,12 @@ resource "aws_iam_role_policy" "gpu_instance" {
         Action = [
           "s3:PutObject",
           "s3:GetObject",
+          "s3:ListBucket",
         ]
-        Resource = "${aws_s3_bucket.audio.arn}/*"
+        Resource = [
+          aws_s3_bucket.audio.arn,
+          "${aws_s3_bucket.audio.arn}/*",
+        ]
       },
       {
         Effect = "Allow"
