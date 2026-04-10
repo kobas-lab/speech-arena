@@ -404,23 +404,13 @@ aws ecr get-login-password --region {region} | docker login --username AWS --pas
 # Docker pull
 docker pull $ECR_REPO_URL:latest
 
-# S3 からモデルをダウンロード（HuggingFace より高速）
-S3_BUCKET="speech-arena-audio"
-MODEL_NAME=$(echo $MODEL_REPO | cut -d/ -f2)
-MODEL_LOCAL_DIR="/tmp/models/$MODEL_NAME"
-mkdir -p $MODEL_LOCAL_DIR
-echo "Downloading model from S3: s3://$S3_BUCKET/models/$MODEL_NAME/"
-aws s3 sync "s3://$S3_BUCKET/models/$MODEL_NAME/" "$MODEL_LOCAL_DIR/" --quiet
-echo "Model download complete: $(du -sh $MODEL_LOCAL_DIR | cut -f1)"
-
-# moshi.server をローカルモデルで起動
+# moshi.server を起動（HuggingFace からモデルダウンロード）
 docker run -d --gpus all --name moshi-server \\
   -p $MOSHI_PORT:$MOSHI_PORT \\
   -e HF_TOKEN=$HF_TOKEN \\
   -e HUGGING_FACE_HUB_TOKEN=$HF_TOKEN \\
-  -v $MODEL_LOCAL_DIR:/model \\
   $ECR_REPO_URL:latest \\
-  uv run -m moshi.server --moshi-weight /model/model.safetensors --tokenizer /model/tokenizer_spm_32k_3.model --port $MOSHI_PORT --host 0.0.0.0
+  uv run -m moshi.server --hf-repo $MODEL_REPO --port $MOSHI_PORT --host 0.0.0.0
 
 # moshi.server が実際に listen するまで待つ（最大15分）
 echo "Waiting for moshi.server to be ready..."
