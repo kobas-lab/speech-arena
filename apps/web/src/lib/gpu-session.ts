@@ -45,7 +45,7 @@ export async function getGpuSession(sessionId: string): Promise<GpuSession> {
 export async function waitForGpuReady(
   sessionId: string,
   onProgress?: (status: string) => void,
-  maxWaitMs: number = 600000, // 10分
+  maxWaitMs: number = 1200000, // 20分
   intervalMs: number = 5000,  // 5秒ごと
 ): Promise<GpuSession> {
   const start = Date.now();
