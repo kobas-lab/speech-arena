@@ -420,7 +420,7 @@ docker run -d --gpus all --name moshi-server \\
   -e HUGGING_FACE_HUB_TOKEN=$HF_TOKEN \\
   -v $MODEL_LOCAL_DIR:/model \\
   $ECR_REPO_URL:latest \\
-  uv run -m moshi.server --model-path /model --port $MOSHI_PORT --host 0.0.0.0
+  uv run -m moshi.server --moshi-weight /model/model.safetensors --tokenizer /model/tokenizer_spm_32k_3.model --port $MOSHI_PORT --host 0.0.0.0
 
 # moshi.server が実際に listen するまで待つ（最大15分）
 echo "Waiting for moshi.server to be ready..."
