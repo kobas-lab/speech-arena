@@ -75,10 +75,10 @@ export function EvaluationWizard() {
         savedSessions.map(async (session) => {
           try {
             const status = await getGpuSession(session.sessionId);
-            if (status.status === "running" && status.publicIp) {
+            if (status.status === "running" && (status.endpointUrl || status.publicIp)) {
               return {
                 armIndex: session.armIndex,
-                endpointUrl: `http://${status.publicIp}:${status.port || session.port}`,
+                endpointUrl: status.endpointUrl || `http://${status.publicIp}:${status.port || session.port}`,
               };
             }
             if (status.status === "failed") {
@@ -90,7 +90,7 @@ export function EvaluationWizard() {
             );
             return {
               armIndex: session.armIndex,
-              endpointUrl: `http://${ready.publicIp}:${ready.port || session.port}`,
+              endpointUrl: ready.endpointUrl || `http://${ready.publicIp}:${ready.port || session.port}`,
             };
           } catch (e) {
             toast.error(e instanceof Error ? e.message : "GPU の起動に失敗しました。ページをリロードして再度お試しください。");

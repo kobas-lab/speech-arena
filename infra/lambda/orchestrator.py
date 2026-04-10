@@ -198,13 +198,21 @@ def get_session(session_id):
     if not item:
         return response(404, {"error": "Session not found"})
 
+    public_ip = item.get("publicIp", "")
+    # Tunnel URL (https://...) の場合はそのまま返す
+    if public_ip and public_ip.startswith("http"):
+        endpoint_url = public_ip
+    elif public_ip:
+        endpoint_url = f"http://{public_ip}:{item.get('port', 8998)}"
+    else:
+        endpoint_url = None
+
     return response(200, {
         "sessionId": item["sessionId"],
         "status": item.get("status", "unknown"),
-        "publicIp": item.get("publicIp"),
+        "publicIp": public_ip,
         "port": item.get("port", 8998),
-        "wsEndpoint": f"wss://{item['publicIp']}:{item.get('port', 8998)}"
-        if item.get("publicIp") else None,
+        "endpointUrl": endpoint_url,
     })
 
 
@@ -422,14 +430,37 @@ for i in $(seq 1 180); do
   sleep 5
 done
 
-# DynamoDB 更新（常に ap-northeast-1）
+# Cloudflare Tunnel をインストール＆起動（HTTPS 化）
+echo "Starting Cloudflare Tunnel..."
+curl -fsSL https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 -o /usr/local/bin/cloudflared
+chmod +x /usr/local/bin/cloudflared
+TUNNEL_LOG="/tmp/cloudflared.log"
+cloudflared tunnel --url http://localhost:$MOSHI_PORT > $TUNNEL_LOG 2>&1 &
+TUNNEL_PID=$!
+
+# Tunnel URL を取得（最大30秒待機）
+TUNNEL_URL=""
+for i in $(seq 1 30); do
+  TUNNEL_URL=$(grep -oP 'https://[a-z0-9-]+\\.trycloudflare\\.com' $TUNNEL_LOG 2>/dev/null | head -1 || true)
+  if [ -n "$TUNNEL_URL" ]; then
+    echo "Tunnel URL: $TUNNEL_URL"
+    break
+  fi
+  sleep 1
+done
+if [ -z "$TUNNEL_URL" ]; then
+  echo "WARNING: Failed to get tunnel URL, using IP"
+  TUNNEL_URL="http://$PUBLIC_IP:$MOSHI_PORT"
+fi
+
+# DynamoDB 更新（Tunnel URL を publicIp フィールドに保存）
 aws dynamodb update-item \\
   --region ap-northeast-1 \\
   --table-name {dynamodb_table} \\
   --key '{{"sessionId": {{"S": "'$SESSION_ID'"}}}}'  \\
   --update-expression "SET #s = :s, publicIp = :ip, instanceId = :iid, startedAt = :t" \\
   --expression-attribute-names '{{"#s": "status"}}' \\
-  --expression-attribute-values '{{":s": {{"S": "running"}}, ":ip": {{"S": "'$PUBLIC_IP'"}}, ":iid": {{"S": "'$INSTANCE_ID'"}}, ":t": {{"S": "'$(date -u +%Y-%m-%dT%H:%M:%SZ)'"}}}}'
+  --expression-attribute-values '{{":s": {{"S": "running"}}, ":ip": {{"S": "'$TUNNEL_URL'"}}, ":iid": {{"S": "'$INSTANCE_ID'"}}, ":t": {{"S": "'$(date -u +%Y-%m-%dT%H:%M:%SZ)'"}}}}'
 
 # 安全装置: 30分後に自動シャットダウン
 # 安全装置: 30分後に自動終了（terminate）

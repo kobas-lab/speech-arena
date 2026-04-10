@@ -5,7 +5,7 @@ interface GpuSession {
   status: "starting" | "running" | "failed";
   publicIp?: string;
   port?: number;
-  wsEndpoint?: string;
+  endpointUrl?: string;
 }
 
 export async function startGpuSession(modelRepo: string, port: number = 8998): Promise<GpuSession> {
