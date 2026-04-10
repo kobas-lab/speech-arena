@@ -320,7 +320,7 @@ def _try_remote_region(region, session_id, model_repo, moshi_port):
     ecr_repo_url = f"518024472814.dkr.ecr.{region}.amazonaws.com/speech-arena/moshi-server"
 
     # 起動試行
-    remote_instance_types = ["g5.xlarge", "g5.2xlarge"]
+    remote_instance_types = ["g5.xlarge"]
     for inst_type in remote_instance_types:
         for subnet_id in subnet_ids:
             try:
