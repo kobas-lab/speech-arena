@@ -320,7 +320,7 @@ def _try_remote_region(region, session_id, model_repo, moshi_port):
     ecr_repo_url = f"518024472814.dkr.ecr.{region}.amazonaws.com/speech-arena/moshi-server"
 
     # 起動試行
-    remote_instance_types = ["g5.xlarge"]
+    remote_instance_types = ["g5.xlarge", "g6e.xlarge", "g5.2xlarge"]
     for inst_type in remote_instance_types:
         for subnet_id in subnet_ids:
             try:
@@ -339,7 +339,7 @@ def _try_remote_region(region, session_id, model_repo, moshi_port):
                     }],
                     InstanceMarketOptions={
                         "MarketType": "spot",
-                        "SpotOptions": {"SpotInstanceType": "one-time", "MaxPrice": "0.60"},
+                        "SpotOptions": {"SpotInstanceType": "one-time", "MaxPrice": "1.50"},
                     },
                     UserData=_build_userdata_override(
                         session_id, model_repo, moshi_port,
