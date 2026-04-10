@@ -356,7 +356,7 @@ docker run -d --gpus all --name moshi-server \\
   -e HF_TOKEN=$HF_TOKEN \\
   -e HUGGING_FACE_HUB_TOKEN=$HF_TOKEN \\
   $ECR_REPO_URL:latest \\
-  uv run -m moshi.server --hf-repo $MODEL_REPO --port $MOSHI_PORT --host 0.0.0.0
+  uv run -m moshi.server --hf-repo $MODEL_REPO --half --port $MOSHI_PORT --host 0.0.0.0 --static /app/static
 
 # moshi.server が実際に listen するまで待つ（最大15分）
 echo "Waiting for moshi.server to be ready..."
