@@ -6,129 +6,99 @@ SpeechArena の AWS インフラを Terraform で管理しています。
 
 ---
 
+## 現在のアーキテクチャ
+
+```
+ワーカー → Vercel (Next.js) → API Gateway (ap-northeast-1)
+                                    ↓
+                               Lambda (orchestrator)
+                                    ↓ 非同期で GPU 起動
+                               EC2 Spot GPU (us-east-1)
+                                    ↓ docker run moshi.server
+                               HuggingFace からモデル DL
+                                    ↓
+                               DynamoDB "running" + パブリック IP
+                                    ↓
+ワーカー ← Vercel がポーリング ← GET /sessions/{id}
+    ↓
+別タブで http://{IP}:8998 (Moshi Web UI) にアクセス
+```
+
+### フロントエンド
+- **Vercel** で Next.js をホスティング（Amplify は DB 接続問題で未使用）
+- GPU_API_ENDPOINT 環境変数で API Gateway に接続
+
+### GPU 起動フロー
+1. ワーカーが「評価を開始する」→ `POST /api/matchups` → `POST /sessions`（API Gateway）
+2. Lambda が非同期で EC2 Spot GPU を起動（東京 → us-east-1 → ソウルの順にフォールバック）
+3. EC2 user data で Docker pull → HuggingFace からモデル DL → moshi.server 起動
+4. moshi.server が HTTP 200 を返すまでヘルスチェック → DynamoDB を `running` に更新
+5. フロント側が `GET /sessions/{id}` をポーリング → `running` になったら別タブで Moshi UI を開く
+
+### GPU 自動停止
+- **cleanup Lambda**: 5分ごと実行。`startedAt` から45分経過したセッションを terminate
+- **user data 安全装置**: 起動から60分後に自動 terminate
+
+---
+
 ## リソース一覧
 
-### Phase 1: データ基盤
-
-| リソース | 名前 | 用途 | コンソール確認場所 |
-|---|---|---|---|
-| S3 バケット | `speech-arena-audio` | 対話音声データの保存 | S3 → バケット |
-| S3 バケット | `speech-arena-tfstate` | Terraform state の保存（手動作成） | S3 → バケット |
-| ECR リポジトリ | `speech-arena/moshi-server` | moshi.server Docker イメージ | ECR → リポジトリ |
-| DynamoDB テーブル | `speech-arena-sessions` | セッション管理 | DynamoDB → テーブル |
-| IAM ロール | `speech-arena-lambda-orchestrator` | Lambda オーケストレーター用 | IAM → ロール |
-| IAM ロール | `speech-arena-gpu-instance` | GPU EC2 インスタンス用 | IAM → ロール |
-| IAM インスタンスプロファイル | `speech-arena-gpu-instance` | EC2 にロールを付与 | IAM → ロール |
-
-### Phase 2: コンピュート & フロントエンド
+> 全て **ap-northeast-1（東京）** にデプロイ。GPU インスタンスのみ **us-east-1（バージニア）** で起動。
 
 | リソース | 名前 / 値 | 用途 | コンソール確認場所 |
 |---|---|---|---|
-| Amplify | `d3375p3p2zjl90.amplifyapp.com` | Next.js フロントエンドホスティング | Amplify → アプリケーション |
-| API Gateway | `https://k26y8y9e18.execute-api.ap-northeast-1.amazonaws.com` | Lambda へのHTTPエンドポイント | API Gateway → API |
-| Lambda | `speech-arena-orchestrator` | セッション開始・GPU 起動 | Lambda → 関数 |
-| Lambda | `speech-arena-cleanup` | アイドル GPU の自動停止（5分ごと） | Lambda → 関数 |
-| EC2 Launch Template | `speech-arena-gpu` | g5.xlarge Spot GPU インスタンス | EC2 → 起動テンプレート |
-| Security Group | `sg-04ee8ae84063f7c3d` | Moshi WebSocket (8998, 8999) + SSH (22) | EC2 → セキュリティグループ |
-| CloudWatch Log Group | `/aws/lambda/speech-arena-orchestrator` | Lambda ログ（14日保持） | CloudWatch → ロググループ |
-| CloudWatch Log Group | `/aws/lambda/speech-arena-cleanup` | Lambda ログ（14日保持） | CloudWatch → ロググループ |
-| CloudWatch Event Rule | `speech-arena-cleanup-schedule` | 5分ごとに cleanup Lambda を実行 | CloudWatch → ルール |
-
-> **注意**: 全てリージョン **ap-northeast-1（東京）** で作成されています。コンソールで別のリージョンが選択されていると表示されません。
+| S3 | `speech-arena-audio` | 対話音声データ / モデルキャッシュ（将来） | S3 → バケット |
+| S3 | `speech-arena-tfstate` | Terraform state（手動作成） | S3 → バケット |
+| ECR (東京) | `speech-arena/moshi-server` | Docker イメージ | ECR → リポジトリ |
+| ECR (us-east-1) | `speech-arena/moshi-server` | Docker イメージ（手動作成） | ECR → リポジトリ (us-east-1) |
+| DynamoDB | `speech-arena-sessions` | GPU セッション管理 | DynamoDB → テーブル |
+| API Gateway | `https://k26y8y9e18.execute-api.ap-northeast-1.amazonaws.com` | HTTP API | API Gateway → API |
+| Lambda | `speech-arena-orchestrator` | GPU 起動・セッション管理 | Lambda → 関数 |
+| Lambda | `speech-arena-cleanup` | アイドル GPU 自動停止（5分ごと） | Lambda → 関数 |
+| EC2 Launch Template | `speech-arena-gpu` | GPU Spot インスタンスのテンプレート | EC2 → 起動テンプレート |
+| Security Group | `sg-04ee8ae84063f7c3d` | GPU インスタンス用（8998, 8999, 22） | EC2 → セキュリティグループ |
+| IAM ロール | `speech-arena-lambda-orchestrator` | Lambda 用 | IAM → ロール |
+| IAM ロール | `speech-arena-gpu-instance` | GPU EC2 用 | IAM → ロール |
+| Amplify | `d3375p3p2zjl90.amplifyapp.com` | 未使用（DB 接続問題） | Amplify → アプリケーション |
+| SSH Key | `speech-arena-gpu` | GPU インスタンスのデバッグ用 | EC2 → キーペア (us-east-1) |
 
 ---
 
-## リソース詳細
+## GPU インスタンスの制約と選択
 
-### S3: speech-arena-audio
+| インスタンス | GPU | VRAM | RAM | vCPU | Moshi 動作 | 備考 |
+|---|---|---|---|---|---|---|
+| **g5.xlarge** | A10G | 24GB | 32GB | 4 | **OK** | 最適。2台で vCPU 8 |
+| g5.2xlarge | A10G | 24GB | 32GB | 8 | OK | 1台で vCPU 上限いっぱい |
+| g6.xlarge | L4 | 24GB | **16GB** | 4 | **NG** | RAM 不足で mmap 失敗 |
+| g6e.xlarge | L4 | 24GB | 32GB | 4 | OK | Spot 価格が高い（$0.8-1.1） |
 
-```
-speech-arena-audio/
-├── raw/{trialId}/        # セッション単位の音声ファイル (wav + metadata.json)
-└── webdataset/           # 学習パイプライン用 (train-{000..N}.tar)
-```
+### vCPU 上限
+- 現在の上限: **8 vCPU**（"All G and VT Spot Instance Requests"）
+- g5.xlarge × 2台 = 8 vCPU → 上限引き上げ申請中（32 vCPU へ）
 
-- サーバーサイド暗号化 (AES256)
-- バージョニング有効
-- パブリックアクセス完全ブロック
-- `raw/` は90日後に Glacier に自動移行
+### フォールバック順序
+1. 東京 Spot: g5.xlarge → g5.2xlarge → g6.xlarge（各3 AZ）
+2. 東京 OnDemand: g5.xlarge（各3 AZ）
+3. **us-east-1 Spot**: g5.xlarge → g6e.xlarge → g5.2xlarge（各6 AZ）
+4. ソウル Spot: g5.xlarge（各4 AZ）
 
-### ECR: speech-arena/moshi-server
+---
 
-- moshi.server の Docker イメージを保存
-- push 時に自動スキャン
-- 古いイメージは10個を超えると自動削除
-- イメージ URI: `518024472814.dkr.ecr.ap-northeast-1.amazonaws.com/speech-arena/moshi-server`
+## 既知の問題
 
-### DynamoDB: speech-arena-sessions
-
-- オンデマンド課金（PAY_PER_REQUEST）
-- パーティションキー: `sessionId` (String)
-- GSI: `status-index`（ステータス別クエリ用）
-- TTL: `expiresAt`（期限切れセッションの自動削除）
-
-### Lambda: speech-arena-orchestrator
-
-セッション開始時に GPU インスタンスを起動するオーケストレーター。
-
-**API エンドポイント:**
-- `POST /sessions` — GPU インスタンスを起動、セッション作成
-- `GET /sessions/{sessionId}` — セッション状態を取得（フロントがポーリング）
-
-**フロー:**
-1. ワーカーが入室 → フロントが `POST /sessions` を呼ぶ
-2. Lambda が EC2 Spot GPU を起動、DynamoDB に `status: "starting"` を記録
-3. EC2 の user data が moshi.server を起動、DynamoDB を `status: "running"` に更新
-4. フロントが `GET /sessions/{sessionId}` をポーリング → `running` になったら WebSocket 接続
-
-### Lambda: speech-arena-cleanup
-
-5分ごとに CloudWatch Event Rule で実行。DynamoDB の `status=running` セッションをチェックし、最終アクティビティから15分以上経過したものの GPU を自動停止。
-
-### EC2 Launch Template: speech-arena-gpu
-
-- インスタンスタイプ: `g5.xlarge`（A10G 24GB VRAM）
-- 課金方式: Spot（最大 $0.50/h）
-- AMI: Deep Learning Base AMI (Ubuntu 22.04, NVIDIA ドライバ入り)
-- User data で自動セットアップ:
-  1. nvidia-container-toolkit インストール
-  2. ECR ログイン → Docker イメージ pull
-  3. moshi.server コンテナ起動
-  4. DynamoDB を `running` に更新
-  5. 安全装置: 30分後に自動シャットダウン
-
-### Security Group: speech-arena-gpu
-
-| ポート | プロトコル | 用途 |
+| 問題 | 原因 | 状態 |
 |---|---|---|
-| 8998 | TCP | Moshi Model A WebSocket |
-| 8999 | TCP | Moshi Model B WebSocket |
-| 22 | TCP | SSH アクセス |
-| 全ポート | 全プロトコル | アウトバウンド（全許可） |
+| moshi.server 起動に10-15分 | HuggingFace からの毎回 15GB DL | S3 キャッシュは fp32 問題で一旦取り消し |
+| g6.xlarge でメモリ不足 | RAM 16GB で fp32 30GB モデルを mmap 不可 | g5 系を優先するよう修正済み |
+| 2台同時起動できない場合がある | vCPU 上限 8 + g5 在庫不足 | 上限引き上げ申請中 |
+| Amplify で DB 接続エラー | PrismaPg アダプターが Amplify SSR で動かない | Vercel にフォールバック |
+| GPU Spot 在庫不足 | 東京リージョンは慢性的に不足 | us-east-1 フォールバックで対応 |
 
-### Amplify: speech-arena-web
-
-- GitHub リポジトリ: `kobas-lab/speech-arena`
-- ブランチ: `main`（自動デプロイ）
-- アプリルート: `apps/web`
-- フレームワーク: Next.js SSR
-- 環境変数: `API_ENDPOINT` に API Gateway の URL を自動設定
-- URL: `https://d3375p3p2zjl90.amplifyapp.com`
-
----
-
-## IAM ロール
-
-**Lambda オーケストレーター** (`speech-arena-lambda-orchestrator`):
-- EC2 起動/停止/タグ付け/Spot リクエスト
-- DynamoDB 読み書き
-- CloudWatch Logs 書き込み
-- GPU インスタンスロールの PassRole
-
-**GPU インスタンス** (`speech-arena-gpu-instance`):
-- ECR からイメージ pull
-- S3 (`speech-arena-audio/*`) への読み書き
-- DynamoDB 更新
+### 起動時間の改善案（未実装）
+- モデルを Docker イメージに含める（イメージサイズ増大）
+- S3 キャッシュ + `--half` オプション（fp16 でロード）
+- EBS スナップショットにモデルをプリロード
 
 ---
 
@@ -137,7 +107,7 @@ speech-arena-audio/
 | 項目 | 値 |
 |---|---|
 | アカウント ID | 518024472814 |
-| リージョン | ap-northeast-1 (東京) |
+| リージョン | ap-northeast-1 (東京) / us-east-1 (バージニア) |
 | コンソール URL | https://518024472814.signin.aws.amazon.com/console |
 
 ---
@@ -148,7 +118,7 @@ speech-arena-audio/
 infra/
 ├── main.tf              # プロバイダ、バックエンド (S3)
 ├── variables.tf         # 変数定義
-├── s3.tf                # S3 バケット (音声データ)
+├── s3.tf                # S3 バケット
 ├── ecr.tf               # ECR リポジトリ
 ├── dynamodb.tf          # DynamoDB テーブル
 ├── iam.tf               # IAM ロール・ポリシー
@@ -159,7 +129,7 @@ infra/
 ├── ec2_gpu.tf           # Spot GPU ローンチテンプレート + セキュリティグループ
 ├── templates/
 │   └── gpu_userdata.sh.tpl  # EC2 user data テンプレート
-├── amplify.tf           # Amplify Hosting
+├── amplify.tf           # Amplify Hosting（未使用）
 ├── outputs.tf           # 出力値
 ├── .gitignore           # tfstate, tfvars, zip 等を除外
 ├── .terraform.lock.hcl  # プロバイダのバージョンロック
@@ -189,15 +159,21 @@ terraform plan
 # デプロイ
 terraform apply
 
-# リソースの確認
-terraform output
-
 # Lambda コードの更新
 cd lambda && zip orchestrator.zip orchestrator.py && cd ..
 terraform apply
 
-# リソースの削除（注意: GPU が動いていないことを確認）
-terraform destroy
+# リソースの確認
+terraform output
+
+# 実行中の GPU インスタンスを確認
+aws ec2 describe-instances --region us-east-1 --filters Name=instance-state-name,Values=running --query 'Reservations[*].Instances[*].{Id:InstanceId,IP:PublicIpAddress,Type:InstanceType}' --output table
+
+# GPU インスタンスを手動停止
+aws ec2 terminate-instances --region us-east-1 --instance-ids <instance-id>
+
+# DynamoDB セッションを全削除
+aws dynamodb scan --table-name speech-arena-sessions --query 'Items[*].sessionId.S' --output text | tr '\t' '\n' | while read id; do aws dynamodb delete-item --table-name speech-arena-sessions --key "{\"sessionId\":{\"S\":\"$id\"}}"; done
 ```
 
 ### terraform.tfvars（要作成、Git 管理外）
@@ -205,8 +181,8 @@ terraform destroy
 ```hcl
 hf_token           = "hf_xxxxx"
 github_oauth_token = "ghp_xxxxx"
-# ssh_key_name     = "my-key"        # オプション: GPU インスタンスに SSH する場合
-# spot_max_price   = "0.50"          # オプション: Spot 最大価格
+database_url       = "postgresql://..."
+direct_url         = "postgresql://..."
 ```
 
 ---
@@ -215,93 +191,24 @@ github_oauth_token = "ghp_xxxxx"
 
 | リソース | 課金 | 備考 |
 |---|---|---|
-| S3 | データ量に応じて | 空なら $0 |
-| ECR | イメージサイズに応じて | 未 push なら $0 |
-| DynamoDB | リクエスト量に応じて | 少量なら $0 |
+| S3 | データ量に応じて | モデルキャッシュ 90GB で ~$2/月 |
+| ECR | イメージサイズに応じて | ~$0.10/月 |
+| DynamoDB | リクエスト量に応じて | ほぼ $0 |
 | Lambda | ほぼ無料 | 月100万リクエスト無料枠 |
 | API Gateway | ほぼ無料 | 月100万リクエスト無料枠 |
-| Amplify | 配信量に応じて | 少量なら $0 |
 | CloudWatch | ほぼ無料 | ログ保持14日 |
-| **EC2 Spot GPU** | **~$0.36/h** | **起動している間だけ。最大の課金要因** |
+| **EC2 Spot GPU** | **$0.36-1.06/h** | **起動中のみ。g5.xlarge ~$0.50、g6e ~$1.0** |
 
-**1評価セッション（30分）**: ~$0.18
-**月100セッション**: ~$18 + 固定費 ~$1 = **~$19/月**
+**GPU が動いていなければ月数ドル程度。GPU が最大のコスト要因。**
 
 ---
-
-## 完了済み
-
-- [x] Phase 1: S3, ECR, DynamoDB, IAM のデプロイ
-- [x] Phase 2: Lambda, API Gateway, EC2 Launch Template, Amplify のデプロイ
-- [x] Amplify ビルド・デプロイ成功確認
-- [x] Docker イメージを ECR に push (`speech-arena/moshi-server:latest`)
-- [x] E2E テスト（API Gateway → Lambda → DynamoDB の動作確認）
 
 ## 今後の計画
 
-- [ ] Spot GPU 容量の確保（時間帯を変えて再テスト or オンデマンドフォールバック）
-- [ ] フロント統合（Next.js から API Gateway を呼び出し、1画面で対話→評価）
+- [ ] vCPU 上限引き上げ承認待ち（8 → 32）
+- [ ] 起動時間の短縮（S3 キャッシュ or Docker イメージにモデル含める）
+- [ ] HTTPS 対応（Cloudflare Tunnel or ALB）
+- [ ] フロント統合（別タブ方式から1画面方式へ）
 - [ ] 音声録音（moshi.server → S3 保存）
 
 詳細: https://github.com/kobas-lab/speech-arena/issues/11
-
----
-
-## E2E テストレポート (2026-04-09)
-
-### テスト内容
-
-API Gateway → Lambda → EC2 Spot GPU の起動フローを検証。
-
-### テスト手順
-
-```bash
-# 1. セッション作成（GPU 起動リクエスト）
-curl -X POST https://k26y8y9e18.execute-api.ap-northeast-1.amazonaws.com/sessions \
-  -H "Content-Type: application/json" \
-  -d '{"modelRepo": "abePclWaseda/llm-jp-moshi-v1", "port": 8998}'
-
-# 2. セッション状態確認（ポーリング）
-curl https://k26y8y9e18.execute-api.ap-northeast-1.amazonaws.com/sessions/{sessionId}
-```
-
-### 結果
-
-| テスト項目 | 結果 | 詳細 |
-|---|---|---|
-| API Gateway → Lambda 呼び出し | **OK** | 即座にレスポンス返却 |
-| Lambda → DynamoDB セッション作成 | **OK** | `status: "starting"` で記録 |
-| Lambda 非同期 GPU 起動 | **OK** | 自分自身を `InvocationType: "Event"` で呼び出し |
-| 複数 AZ フォールバック | **OK** | 3 AZ (1a, 1c, 1d) を順に試行 |
-| 複数インスタンスタイプフォールバック | **OK** | g5.xlarge → g5.2xlarge → g6.xlarge を順に試行 |
-| GET /sessions/{id} ポーリング | **OK** | セッション状態を正常に返却 |
-| EC2 Spot GPU 起動 | **容量不足** | 東京リージョン全 AZ で一時的に Spot 容量枯渇 |
-
-### 発見された問題と対応
-
-1. **API Gateway 30秒タイムアウト**: GPU 起動は複数 AZ を試行するため30秒を超える
-   - **対応**: Lambda を非同期化。`POST /sessions` は即座にレスポンスを返し、GPU 起動はバックグラウンドで実行
-   - フロントは `GET /sessions/{sessionId}` でポーリングして状態を監視
-
-2. **DynamoDB Decimal シリアライズエラー**: DynamoDB が数値を `Decimal` 型で返すため JSON 変換に失敗
-   - **対応**: `DecimalEncoder` を追加
-
-3. **Spot GPU 容量不足**: 東京リージョン (ap-northeast-1) の全 AZ で g5.xlarge, g5.2xlarge, g6.xlarge が一時的に枯渇
-   - **対応済み**: 複数インスタンスタイプのフォールバックを実装
-   - **今後の対応案**: 時間帯を変えて再テスト / オンデマンドインスタンスへのフォールバック追加
-
-### アーキテクチャ（検証済みフロー）
-
-```
-フロント → POST /sessions → API Gateway → Lambda (同期)
-                                              ↓ 即座にレスポンス返却
-                                              ↓ 非同期で自分自身を呼び出し
-                                           Lambda (非同期)
-                                              ↓ 複数 AZ × 複数インスタンスタイプを試行
-                                           EC2 Spot GPU 起動
-                                              ↓ user data で moshi.server 起動
-                                           DynamoDB status → "running"
-                                              ↓
-フロント ← GET /sessions/{id} ← API Gateway ← Lambda
-           ポーリングで状態監視
-```

@@ -54,14 +54,36 @@ for i in $(seq 1 180); do
   sleep 5
 done
 
-# DynamoDB を "running" に更新（DynamoDB は常に ap-northeast-1）
+# Cloudflare Tunnel をインストール＆起動（HTTPS 化）
+echo "Starting Cloudflare Tunnel..."
+curl -fsSL https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 -o /usr/local/bin/cloudflared
+chmod +x /usr/local/bin/cloudflared
+TUNNEL_LOG="/tmp/cloudflared.log"
+cloudflared tunnel --url http://localhost:$MOSHI_PORT > $TUNNEL_LOG 2>&1 &
+
+# Tunnel URL を取得（最大30秒待機）
+TUNNEL_URL=""
+for i in $(seq 1 30); do
+  TUNNEL_URL=$(grep -oP 'https://[a-z0-9-]+\.trycloudflare\.com' $TUNNEL_LOG 2>/dev/null | head -1 || true)
+  if [ -n "$TUNNEL_URL" ]; then
+    echo "Tunnel URL: $TUNNEL_URL"
+    break
+  fi
+  sleep 1
+done
+if [ -z "$TUNNEL_URL" ]; then
+  echo "WARNING: Failed to get tunnel URL, using IP"
+  TUNNEL_URL="http://$PUBLIC_IP:$MOSHI_PORT"
+fi
+
+# DynamoDB を "running" に更新（Tunnel URL を publicIp フィールドに保存）
 aws dynamodb update-item \
   --region ap-northeast-1 \
   --table-name $DYNAMODB_TABLE \
   --key "{\"sessionId\": {\"S\": \"$SESSION_ID\"}}" \
   --update-expression "SET #s = :s, publicIp = :ip, instanceId = :iid, startedAt = :t" \
   --expression-attribute-names '{"#s": "status"}' \
-  --expression-attribute-values "{\":s\": {\"S\": \"running\"}, \":ip\": {\"S\": \"$PUBLIC_IP\"}, \":iid\": {\"S\": \"$INSTANCE_ID\"}, \":t\": {\"S\": \"$(date -u +%Y-%m-%dT%H:%M:%SZ)\"}}"
+  --expression-attribute-values "{\":s\": {\"S\": \"running\"}, \":ip\": {\"S\": \"$TUNNEL_URL\"}, \":iid\": {\"S\": \"$INSTANCE_ID\"}, \":t\": {\"S\": \"$(date -u +%Y-%m-%dT%H:%M:%SZ)\"}}"
 
 # 安全装置: 30分後に自動シャットダウン
 # 安全装置: 30分後に自動終了（terminate）
