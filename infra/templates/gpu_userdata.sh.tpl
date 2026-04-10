@@ -66,4 +66,4 @@ aws dynamodb update-item \
 
 # 安全装置: 30分後に自動シャットダウン
 # 安全装置: 30分後に自動終了（terminate）
-(sleep 1800 && aws ec2 terminate-instances --region $(curl -s -H "X-aws-ec2-metadata-token: $TOKEN" http://169.254.169.254/latest/meta-data/placement/region) --instance-ids $INSTANCE_ID) &
+(sleep 3600 && aws ec2 terminate-instances --region $(curl -s -H "X-aws-ec2-metadata-token: $TOKEN" http://169.254.169.254/latest/meta-data/placement/region) --instance-ids $INSTANCE_ID) &

@@ -68,7 +68,7 @@ variable "github_oauth_token" {
 variable "session_timeout_minutes" {
   description = "Minutes before auto-terminating idle GPU instances"
   type        = number
-  default     = 15
+  default     = 45
 }
 
 variable "model_repo_a" {
