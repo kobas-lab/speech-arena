@@ -398,14 +398,14 @@ aws ecr get-login-password --region {region} | docker login --username AWS --pas
 # Docker pull & run
 docker pull $ECR_REPO_URL:latest
 if [ -n "$HF_CACHE_DIR" ]; then
-  docker run -d --gpus all --name moshi-server \\
+  docker run -d --gpus all --name moshi-server --restart unless-stopped \\
     -p $MOSHI_PORT:$MOSHI_PORT \\
     -e HF_TOKEN=$HF_TOKEN -e HUGGING_FACE_HUB_TOKEN=$HF_TOKEN \\
     -e HF_HOME=/hf_cache -v $HF_CACHE_DIR:/hf_cache \\
     $ECR_REPO_URL:latest \\
     uv run -m moshi.server --hf-repo $MODEL_REPO --half --port $MOSHI_PORT --host 0.0.0.0 --static /app/static
 else
-  docker run -d --gpus all --name moshi-server \\
+  docker run -d --gpus all --name moshi-server --restart unless-stopped \\
     -p $MOSHI_PORT:$MOSHI_PORT \\
     -e HF_TOKEN=$HF_TOKEN -e HUGGING_FACE_HUB_TOKEN=$HF_TOKEN \\
     $ECR_REPO_URL:latest \\
@@ -443,43 +443,8 @@ aws dynamodb update-item \\
   --expression-attribute-names '{{"#s": "status"}}' \\
   --expression-attribute-values '{{":s": {{"S": "running"}}, ":ip": {{"S": "'$TUNNEL_URL'"}}, ":iid": {{"S": "'$INSTANCE_ID'"}}, ":t": {{"S": "'$(date -u +%Y-%m-%dT%H:%M:%SZ)'"}}}}'
 
-# === systemd サービス登録（Stop/Start 後の自動起動用）===
-cat > /etc/systemd/system/moshi-server.service <<SVCEOF
-[Unit]
-Description=Moshi Server
-After=docker.service
-Requires=docker.service
-
-[Service]
-Type=oneshot
-RemainAfterExit=yes
-ExecStart=/bin/bash -c 'docker start moshi-server 2>/dev/null || docker run -d --gpus all --name moshi-server -p $MOSHI_PORT:$MOSHI_PORT -e HF_TOKEN=$HF_TOKEN -e HUGGING_FACE_HUB_TOKEN=$HF_TOKEN $ECR_REPO_URL:latest uv run -m moshi.server --hf-repo $MODEL_REPO --half --port $MOSHI_PORT --host 0.0.0.0 --static /app/static'
-ExecStop=/bin/bash -c 'docker stop moshi-server 2>/dev/null || true'
-
-[Install]
-WantedBy=multi-user.target
-SVCEOF
-systemctl daemon-reload
-systemctl enable moshi-server.service
-
-# Cloudflare Tunnel の systemd サービスも登録
-cat > /etc/systemd/system/cloudflared.service <<CFEOF
-[Unit]
-Description=Cloudflare Tunnel
-After=moshi-server.service
-Requires=moshi-server.service
-
-[Service]
-Type=simple
-ExecStart=/usr/local/bin/cloudflared tunnel --url http://localhost:$MOSHI_PORT
-Restart=always
-RestartSec=5
-
-[Install]
-WantedBy=multi-user.target
-CFEOF
-systemctl daemon-reload
-systemctl enable cloudflared.service
+# Docker の --restart unless-stopped により、EC2 Stop/Start 後に
+# Docker デーモンが自動でコンテナを再起動する（HF キャッシュも保持）
 """
     return script
 
