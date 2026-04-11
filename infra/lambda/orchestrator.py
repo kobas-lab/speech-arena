@@ -262,13 +262,15 @@ def _try_cold_start(region, session_id, model_repo, moshi_port):
 
     ecr_repo_url = f"518024472814.dkr.ecr.{region}.amazonaws.com/speech-arena/moshi-server"
     snapshot_id = os.environ.get("MODEL_SNAPSHOT_ID", "")
+    # スナップショットは us-east-1 にのみ存在
+    use_snapshot = snapshot_id and region == "us-east-1"
 
     remote_instance_types = ["g5.xlarge", "g6e.xlarge", "g5.2xlarge"]
     for inst_type in remote_instance_types:
         for subnet_id in subnet_ids:
             try:
                 block_devices = [{"DeviceName": "/dev/sda1", "Ebs": {"VolumeSize": 100, "VolumeType": "gp3"}}]
-                if snapshot_id:
+                if use_snapshot:
                     block_devices.append({
                         "DeviceName": "/dev/xvdf",
                         "Ebs": {"SnapshotId": snapshot_id, "VolumeSize": 200, "VolumeType": "gp3", "DeleteOnTermination": False},
@@ -285,7 +287,11 @@ def _try_cold_start(region, session_id, model_repo, moshi_port):
                     BlockDeviceMappings=block_devices,
                     InstanceMarketOptions={
                         "MarketType": "spot",
-                        "SpotOptions": {"SpotInstanceType": "persistent", "MaxPrice": "1.50"},
+                        "SpotOptions": {
+                            "SpotInstanceType": "persistent",
+                            "InstanceInterruptionBehavior": "stop",
+                            "MaxPrice": "1.50",
+                        },
                     },
                     UserData=_build_userdata(session_id, model_repo, moshi_port, region, ecr_repo_url),
                     TagSpecifications=[{
