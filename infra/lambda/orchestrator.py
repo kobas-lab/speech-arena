@@ -398,18 +398,18 @@ aws ecr get-login-password --region {region} | docker login --username AWS --pas
 # Docker pull & run
 docker pull $ECR_REPO_URL:latest
 if [ -n "$HF_CACHE_DIR" ]; then
-  docker run -d --gpus all --name moshi-server --restart unless-stopped \\
+  docker run -d --gpus all --name moshi-server --restart always \\
     -p $MOSHI_PORT:$MOSHI_PORT \\
     -e HF_TOKEN=$HF_TOKEN -e HUGGING_FACE_HUB_TOKEN=$HF_TOKEN \\
     -e HF_HOME=/hf_cache -v $HF_CACHE_DIR:/hf_cache \\
     $ECR_REPO_URL:latest \\
-    uv run -m moshi.server --hf-repo $MODEL_REPO --half --port $MOSHI_PORT --host 0.0.0.0 --static /app/static
+    uv run -m moshi.server --hf-repo $MODEL_REPO --port $MOSHI_PORT --host 0.0.0.0 --static /app/static
 else
-  docker run -d --gpus all --name moshi-server --restart unless-stopped \\
+  docker run -d --gpus all --name moshi-server --restart always \\
     -p $MOSHI_PORT:$MOSHI_PORT \\
     -e HF_TOKEN=$HF_TOKEN -e HUGGING_FACE_HUB_TOKEN=$HF_TOKEN \\
     $ECR_REPO_URL:latest \\
-    uv run -m moshi.server --hf-repo $MODEL_REPO --half --port $MOSHI_PORT --host 0.0.0.0 --static /app/static
+    uv run -m moshi.server --hf-repo $MODEL_REPO --port $MOSHI_PORT --host 0.0.0.0 --static /app/static
 fi
 
 # ヘルスチェック
@@ -443,7 +443,7 @@ aws dynamodb update-item \\
   --expression-attribute-names '{{"#s": "status"}}' \\
   --expression-attribute-values '{{":s": {{"S": "running"}}, ":ip": {{"S": "'$TUNNEL_URL'"}}, ":iid": {{"S": "'$INSTANCE_ID'"}}, ":t": {{"S": "'$(date -u +%Y-%m-%dT%H:%M:%SZ)'"}}}}'
 
-# Docker の --restart unless-stopped により、EC2 Stop/Start 後に
+# Docker の --restart always により、EC2 Stop/Start 後に
 # Docker デーモンが自動でコンテナを再起動する（HF キャッシュも保持）
 """
     return script

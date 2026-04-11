@@ -66,7 +66,7 @@ if [ -n "$HF_CACHE_DIR" ] && [ -d "$HF_CACHE_DIR" ]; then
     -e HF_HOME=/hf_cache \
     -v $HF_CACHE_DIR:/hf_cache \
     $ECR_REPO_URL:latest \
-    uv run -m moshi.server --hf-repo $MODEL_REPO --half --port $MOSHI_PORT --host 0.0.0.0 --static /app/static
+    uv run -m moshi.server --hf-repo $MODEL_REPO --port $MOSHI_PORT --host 0.0.0.0 --static /app/static
 else
   echo "No EBS cache, downloading from HuggingFace"
   docker run -d --gpus all \
@@ -75,7 +75,7 @@ else
     -e HF_TOKEN=$HF_TOKEN \
     -e HUGGING_FACE_HUB_TOKEN=$HF_TOKEN \
     $ECR_REPO_URL:latest \
-    uv run -m moshi.server --hf-repo $MODEL_REPO --half --port $MOSHI_PORT --host 0.0.0.0 --static /app/static
+    uv run -m moshi.server --hf-repo $MODEL_REPO --port $MOSHI_PORT --host 0.0.0.0 --static /app/static
 fi
 
 # moshi.server が実際に listen するまで待つ（最大15分）
