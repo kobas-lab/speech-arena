@@ -292,7 +292,7 @@ def _try_cold_start(region, session_id, model_repo, moshi_port):
     for inst_type in remote_instance_types:
         for subnet_id in subnet_ids:
             try:
-                block_devices = [{"DeviceName": "/dev/sda1", "Ebs": {"VolumeSize": 100, "VolumeType": "gp3"}}]
+                block_devices = [{"DeviceName": "/dev/sda1", "Ebs": {"VolumeSize": 200, "VolumeType": "gp3"}}]
                 if use_snapshot:
                     block_devices.append({
                         "DeviceName": "/dev/xvdf",

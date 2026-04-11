@@ -64,7 +64,7 @@ else
     --subnet-id $SUBNET_ID --security-group-ids $SG_ID \
     --key-name speech-arena-gpu \
     --iam-instance-profile Name=speech-arena-gpu-instance \
-    --block-device-mappings '[{"DeviceName":"/dev/sda1","Ebs":{"VolumeSize":100,"VolumeType":"gp3"}}]' \
+    --block-device-mappings '[{"DeviceName":"/dev/sda1","Ebs":{"VolumeSize":200,"VolumeType":"gp3"}}]' \
     --tag-specifications "ResourceType=instance,Tags=[{Key=Name,Value=speech-arena-gpu},{Key=Project,Value=speech-arena}]" \
     --query 'Instances[0].InstanceId' --output text)
 
