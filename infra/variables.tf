@@ -71,6 +71,12 @@ variable "session_timeout_minutes" {
   default     = 45
 }
 
+variable "model_snapshot_id" {
+  description = "EBS snapshot ID containing pre-loaded models (us-east-1)"
+  type        = string
+  default     = ""
+}
+
 variable "model_repo_a" {
   description = "HuggingFace repo for model A"
   type        = string

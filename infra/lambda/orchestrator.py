@@ -279,7 +279,21 @@ def _try_remote_region(region, session_id, model_repo, moshi_port):
                     SecurityGroupIds=[sg_id],
                     IamInstanceProfile={"Name": "speech-arena-gpu-instance"},
                     KeyName="speech-arena-gpu",
-                    BlockDeviceMappings=[{
+                    BlockDeviceMappings=[
+                        {
+                            "DeviceName": "/dev/sda1",
+                            "Ebs": {"VolumeSize": 100, "VolumeType": "gp3"},
+                        },
+                        {
+                            "DeviceName": "/dev/xvdf",
+                            "Ebs": {
+                                "SnapshotId": os.environ.get("MODEL_SNAPSHOT_ID", ""),
+                                "VolumeSize": 100,
+                                "VolumeType": "gp3",
+                                "DeleteOnTermination": True,
+                            },
+                        },
+                    ] if os.environ.get("MODEL_SNAPSHOT_ID") else [{
                         "DeviceName": "/dev/sda1",
                         "Ebs": {"VolumeSize": 100, "VolumeType": "gp3"},
                     }],
@@ -333,6 +347,14 @@ TOKEN=$(curl -s -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-m
 INSTANCE_ID=$(curl -s -H "X-aws-ec2-metadata-token: $TOKEN" http://169.254.169.254/latest/meta-data/instance-id)
 PUBLIC_IP=$(curl -s -H "X-aws-ec2-metadata-token: $TOKEN" http://169.254.169.254/latest/meta-data/public-ipv4)
 
+# モデルボリュームをマウント（EBS スナップショットからアタッチ済みの場合）
+if [ -b /dev/xvdf ]; then
+  echo "Mounting model volume..."
+  mkdir -p /mnt/models
+  mount /dev/xvdf /mnt/models 2>/dev/null || true
+  echo "Model volume: $(ls /mnt/models/ 2>/dev/null)"
+fi
+
 # nvidia-container-toolkit
 if ! command -v nvidia-container-runtime &> /dev/null; then
   curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey | gpg --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg
@@ -350,13 +372,26 @@ aws ecr get-login-password --region {region} | docker login --username AWS --pas
 # Docker pull
 docker pull $ECR_REPO_URL:latest
 
-# moshi.server を起動（HuggingFace からモデルダウンロード）
+# モデルボリュームをマウント（EBS スナップショットから作成されたボリューム）
+MODEL_NAME=$(echo $MODEL_REPO | cut -d/ -f2)
+if [ -d "/mnt/models/$MODEL_NAME" ]; then
+  echo "Using pre-loaded model from EBS: /mnt/models/$MODEL_NAME"
+  MODEL_ARGS="--moshi-weight /models/$MODEL_NAME/model.safetensors --tokenizer /models/$MODEL_NAME/tokenizer_spm_32k_3.model"
+  VOLUME_MOUNT="-v /mnt/models/$MODEL_NAME:/models/$MODEL_NAME"
+else
+  echo "Model not found on EBS, falling back to HuggingFace download"
+  MODEL_ARGS="--hf-repo $MODEL_REPO"
+  VOLUME_MOUNT=""
+fi
+
+# moshi.server を起動
 docker run -d --gpus all --name moshi-server \\
   -p $MOSHI_PORT:$MOSHI_PORT \\
   -e HF_TOKEN=$HF_TOKEN \\
   -e HUGGING_FACE_HUB_TOKEN=$HF_TOKEN \\
+  $VOLUME_MOUNT \\
   $ECR_REPO_URL:latest \\
-  uv run -m moshi.server --hf-repo $MODEL_REPO --half --port $MOSHI_PORT --host 0.0.0.0 --static /app/static
+  uv run -m moshi.server $MODEL_ARGS --half --port $MOSHI_PORT --host 0.0.0.0 --static /app/static
 
 # moshi.server が実際に listen するまで待つ（最大15分）
 echo "Waiting for moshi.server to be ready..."
