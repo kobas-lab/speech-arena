@@ -348,17 +348,25 @@ INSTANCE_ID=$(curl -s -H "X-aws-ec2-metadata-token: $TOKEN" http://169.254.169.2
 PUBLIC_IP=$(curl -s -H "X-aws-ec2-metadata-token: $TOKEN" http://169.254.169.254/latest/meta-data/public-ipv4)
 
 # モデルボリュームをマウント（EBS スナップショットからアタッチ済みの場合）
-MDISK=""
-for d in /dev/nvme1n1 /dev/xvdf; do [ -b "$d" ] && MDISK=$d && break; done
-if [ -n "$MDISK" ]; then
-  echo "Mounting model volume..."
-  mkdir -p /mnt/models
-  mount $MDISK /mnt/models 2>/dev/null || true
-  echo "Model volume: $(ls /mnt/models/ 2>/dev/null)"
-  HF_CACHE_DIR="/mnt/models/hf_cache"
-else
-  HF_CACHE_DIR=""
-fi
+# NVMe インスタンスではデバイス番号が変わるので、ext4 ファイルシステムで識別
+HF_CACHE_DIR=""
+mkdir -p /mnt/models
+for d in /dev/nvme1n1 /dev/nvme2n1 /dev/nvme3n1 /dev/nvme4n1 /dev/xvdf; do
+  if [ -b "$d" ]; then
+    FS=$(sudo file -s "$d" 2>/dev/null | grep -c ext4 || true)
+    if [ "$FS" -gt 0 ]; then
+      echo "Mounting model volume: $d"
+      mount $d /mnt/models 2>/dev/null || true
+      if [ -d "/mnt/models/hf_cache" ]; then
+        HF_CACHE_DIR="/mnt/models/hf_cache"
+        echo "HF cache found: $(ls /mnt/models/hf_cache/ | head -5)"
+        break
+      else
+        umount /mnt/models 2>/dev/null || true
+      fi
+    fi
+  fi
+done
 
 # nvidia-container-toolkit
 if ! command -v nvidia-container-runtime &> /dev/null; then
