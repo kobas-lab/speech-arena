@@ -220,14 +220,7 @@ def _try_cold_start(region, session_id, model_repo, moshi_port):
                     IamInstanceProfile={"Name": "speech-arena-gpu-instance"},
                     KeyName="speech-arena-gpu",
                     BlockDeviceMappings=block_devices,
-                    InstanceMarketOptions={
-                        "MarketType": "spot",
-                        "SpotOptions": {
-                            "SpotInstanceType": "persistent",
-                            "InstanceInterruptionBehavior": "stop",
-                            "MaxPrice": "1.50",
-                        },
-                    },
+                    # オンデマンド（Stop/Start のウォームプールに対応）
                     UserData=_build_userdata(session_id, model_repo, moshi_port, region, ecr_repo_url),
                     TagSpecifications=[{
                         "ResourceType": "instance",
