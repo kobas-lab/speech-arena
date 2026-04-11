@@ -80,7 +80,8 @@ def _launch_gpu(event):
 
 
 def _try_warm_start(region, session_id, model_repo, moshi_port):
-    """停止中の SpeechArena GPU インスタンスを再起動（ウォームスタート）"""
+    """停止中の SpeechArena GPU インスタンスを再起動（ウォームスタート）
+    systemd サービスが自動で moshi.server を起動するので、Start するだけ"""
     remote_ec2 = boto3.client("ec2", region_name=region)
 
     try:
@@ -112,102 +113,36 @@ def _try_warm_start(region, session_id, model_repo, moshi_port):
         desc = remote_ec2.describe_instances(InstanceIds=[instance_id])
         public_ip = desc["Reservations"][0]["Instances"][0].get("PublicIpAddress", "")
 
-        # moshi.server を Docker で起動（モデルは EBS に残っている）
-        # user data は再実行されないので、SSM Run Command で起動
-        ecr_repo_url = f"518024472814.dkr.ecr.{region}.amazonaws.com/speech-arena/moshi-server"
-        hf_token = os.environ.get("HF_TOKEN", "")
+        # systemd が自動で moshi.server + cloudflared を起動するので、
+        # ヘルスチェックして DynamoDB を更新するだけ
+        print(f"Waiting for moshi.server on {public_ip}:{moshi_port}...")
+        import urllib.request
+        tunnel_url = None
+        for i in range(180):
+            try:
+                urllib.request.urlopen(f"http://{public_ip}:{moshi_port}", timeout=3)
+                print(f"moshi.server ready after {i*5}s")
+                # Tunnel URL を取得（DynamoDB から前回の値を使うか、IP を使う）
+                tunnel_url = f"http://{public_ip}:{moshi_port}"
+                break
+            except Exception:
+                time.sleep(5)
 
-        ssm = boto3.client("ssm", region_name=region)
-        ssm.send_command(
-            InstanceIds=[instance_id],
-            DocumentName="AWS-RunShellScript",
-            Parameters={"commands": [f"""
-#!/bin/bash
-set -euxo pipefail
-
-# Docker コンテナを停止・削除（前回の残り）
-docker rm -f moshi-server 2>/dev/null || true
-
-# ECR ログイン
-aws ecr get-login-password --region {region} | docker login --username AWS --password-stdin {ecr_repo_url}
-
-# HF キャッシュのマウント確認
-HF_CACHE_DIR=""
-mkdir -p /mnt/models
-for d in /dev/nvme1n1 /dev/nvme2n1 /dev/nvme3n1 /dev/nvme4n1 /dev/xvdf; do
-  if [ -b "$d" ]; then
-    FS=$(sudo file -s "$d" 2>/dev/null | grep -c ext4 || true)
-    if [ "$FS" -gt 0 ]; then
-      mount $d /mnt/models 2>/dev/null || true
-      if [ -d "/mnt/models/hf_cache" ]; then
-        HF_CACHE_DIR="/mnt/models/hf_cache"
-        break
-      else
-        umount /mnt/models 2>/dev/null || true
-      fi
-    fi
-  fi
-done
-
-# moshi.server を起動
-if [ -n "$HF_CACHE_DIR" ]; then
-  docker run -d --gpus all --name moshi-server \
-    -p {moshi_port}:{moshi_port} \
-    -e HF_TOKEN={hf_token} \
-    -e HUGGING_FACE_HUB_TOKEN={hf_token} \
-    -e HF_HOME=/hf_cache \
-    -v $HF_CACHE_DIR:/hf_cache \
-    {ecr_repo_url}:latest \
-    uv run -m moshi.server --hf-repo {model_repo} --half --port {moshi_port} --host 0.0.0.0 --static /app/static
-else
-  docker run -d --gpus all --name moshi-server \
-    -p {moshi_port}:{moshi_port} \
-    -e HF_TOKEN={hf_token} \
-    -e HUGGING_FACE_HUB_TOKEN={hf_token} \
-    {ecr_repo_url}:latest \
-    uv run -m moshi.server --hf-repo {model_repo} --half --port {moshi_port} --host 0.0.0.0 --static /app/static
-fi
-
-# ヘルスチェック
-for i in $(seq 1 180); do
-  if curl -s -o /dev/null http://localhost:{moshi_port} 2>/dev/null; then
-    echo "Ready after ${{i}} seconds"
-    break
-  fi
-  sleep 5
-done
-
-# Cloudflare Tunnel
-curl -fsSL https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 -o /usr/local/bin/cloudflared 2>/dev/null
-chmod +x /usr/local/bin/cloudflared
-TUNNEL_LOG="/tmp/cloudflared.log"
-pkill cloudflared 2>/dev/null || true
-cloudflared tunnel --url http://localhost:{moshi_port} > $TUNNEL_LOG 2>&1 &
-
-TUNNEL_URL=""
-for i in $(seq 1 30); do
-  TUNNEL_URL=$(grep -oP 'https://[a-z0-9-]+\\.trycloudflare\\.com' $TUNNEL_LOG 2>/dev/null | head -1 || true)
-  [ -n "$TUNNEL_URL" ] && break
-  sleep 1
-done
-[ -z "$TUNNEL_URL" ] && TUNNEL_URL="http://{public_ip}:{moshi_port}"
-
-# DynamoDB 更新
-aws dynamodb update-item \
-  --region ap-northeast-1 \
-  --table-name {TABLE_NAME} \
-  --key '{{"sessionId": {{"S": "{session_id}"}}}}' \
-  --update-expression "SET #s = :s, publicIp = :ip, instanceId = :iid, startedAt = :t" \
-  --expression-attribute-names '{{"#s": "status"}}' \
-  --expression-attribute-values '{{":s": {{"S": "running"}}, ":ip": {{"S": "'$TUNNEL_URL'"}}, ":iid": {{"S": "{instance_id}"}}, ":t": {{"S": "'"$(date -u +%Y-%m-%dT%H:%M:%SZ)"'"}}}}'
-"""]}
-        )
+        if not tunnel_url:
+            print("Warm start: moshi.server did not become ready")
+            return None
 
         table.update_item(
             Key={"sessionId": session_id},
-            UpdateExpression="SET instanceId = :iid, #r = :r",
-            ExpressionAttributeNames={"#r": "region"},
-            ExpressionAttributeValues={":iid": instance_id, ":r": region},
+            UpdateExpression="SET instanceId = :iid, #r = :r, #s = :s, publicIp = :ip, startedAt = :t",
+            ExpressionAttributeNames={"#r": "region", "#s": "status"},
+            ExpressionAttributeValues={
+                ":iid": instance_id,
+                ":r": region,
+                ":s": "running",
+                ":ip": tunnel_url,
+                ":t": datetime.now(timezone.utc).isoformat(),
+            },
         )
         return {"instanceId": instance_id, "region": region, "warmStart": True}
 
@@ -514,6 +449,45 @@ aws dynamodb update-item \\
   --update-expression "SET #s = :s, publicIp = :ip, instanceId = :iid, startedAt = :t" \\
   --expression-attribute-names '{{"#s": "status"}}' \\
   --expression-attribute-values '{{":s": {{"S": "running"}}, ":ip": {{"S": "'$TUNNEL_URL'"}}, ":iid": {{"S": "'$INSTANCE_ID'"}}, ":t": {{"S": "'$(date -u +%Y-%m-%dT%H:%M:%SZ)'"}}}}'
+
+# === systemd サービス登録（Stop/Start 後の自動起動用）===
+cat > /etc/systemd/system/moshi-server.service <<SVCEOF
+[Unit]
+Description=Moshi Server
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStartPre=/bin/bash -c 'docker rm -f moshi-server 2>/dev/null || true'
+ExecStart=/bin/bash -c 'docker start moshi-server 2>/dev/null || docker run -d --gpus all --name moshi-server -p $MOSHI_PORT:$MOSHI_PORT -e HF_TOKEN=$HF_TOKEN -e HUGGING_FACE_HUB_TOKEN=$HF_TOKEN $ECR_REPO_URL:latest uv run -m moshi.server --hf-repo $MODEL_REPO --half --port $MOSHI_PORT --host 0.0.0.0 --static /app/static'
+ExecStop=/bin/bash -c 'docker stop moshi-server'
+
+[Install]
+WantedBy=multi-user.target
+SVCEOF
+systemctl daemon-reload
+systemctl enable moshi-server.service
+
+# Cloudflare Tunnel の systemd サービスも登録
+cat > /etc/systemd/system/cloudflared.service <<CFEOF
+[Unit]
+Description=Cloudflare Tunnel
+After=moshi-server.service
+Requires=moshi-server.service
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/cloudflared tunnel --url http://localhost:$MOSHI_PORT
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+CFEOF
+systemctl daemon-reload
+systemctl enable cloudflared.service
 """
     return script
 
