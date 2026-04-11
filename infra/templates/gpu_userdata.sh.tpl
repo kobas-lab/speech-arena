@@ -13,10 +13,12 @@ INSTANCE_ID=$(curl -s -H "X-aws-ec2-metadata-token: $TOKEN" http://169.254.169.2
 PUBLIC_IP=$(curl -s -H "X-aws-ec2-metadata-token: $TOKEN" http://169.254.169.254/latest/meta-data/public-ipv4)
 
 # モデルボリュームをマウント（EBS スナップショットからアタッチ済みの場合）
-if [ -b /dev/xvdf ]; then
+MDISK=""
+for d in /dev/nvme1n1 /dev/xvdf; do [ -b "$d" ] && MDISK=$d && break; done
+if [ -n "$MDISK" ]; then
   echo "Mounting model volume..."
   mkdir -p /mnt/models
-  mount /dev/xvdf /mnt/models 2>/dev/null || true
+  mount $MDISK /mnt/models 2>/dev/null || true
   echo "Model volume: $(ls /mnt/models/ 2>/dev/null)"
 fi
 
