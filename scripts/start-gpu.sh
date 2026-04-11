@@ -114,6 +114,7 @@ docker run -d --gpus all --name moshi-server-a --restart always \
   -p 8998:8998 \
   -e HF_TOKEN=$HF_TOKEN -e HUGGING_FACE_HUB_TOKEN=$HF_TOKEN \
   -e HF_HOME=/hf_cache -v /opt/hf_cache:/hf_cache \
+  -e HF_HUB_ENABLE_HF_TRANSFER=0 \
   $ECR_REPO:latest \
   uv run -m moshi.server --hf-repo $MODEL_A --port 8998 --host 0.0.0.0 --static /app/static
 
@@ -132,6 +133,7 @@ docker run -d --gpus all --name moshi-server-b --restart always \
   -p 8999:8999 \
   -e HF_TOKEN=$HF_TOKEN -e HUGGING_FACE_HUB_TOKEN=$HF_TOKEN \
   -e HF_HOME=/hf_cache -v /opt/hf_cache:/hf_cache \
+  -e HF_HUB_ENABLE_HF_TRANSFER=0 \
   $ECR_REPO:latest \
   uv run -m moshi.server --hf-repo $MODEL_B --port 8999 --host 0.0.0.0 --static /app/static
 
