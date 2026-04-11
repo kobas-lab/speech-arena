@@ -108,7 +108,7 @@ docker pull $ECR_REPO:latest
 # 既存コンテナを全て停止
 docker rm -f moshi-server moshi-server-a moshi-server-b 2>/dev/null || true
 
-# Model A (ポート 8998)
+# Model A (ポート 8998) — 先に起動して完了を待つ
 echo "Starting Model A: $MODEL_A"
 docker run -d --gpus all --name moshi-server-a --restart always \
   -p 8998:8998 \
@@ -117,7 +117,16 @@ docker run -d --gpus all --name moshi-server-a --restart always \
   $ECR_REPO:latest \
   uv run -m moshi.server --hf-repo $MODEL_A --port 8998 --host 0.0.0.0 --static /app/static
 
-# Model B (ポート 8999)
+echo "  Model A のロード完了を待っています..."
+for i in \$(seq 1 180); do
+  if curl -s -o /dev/null http://localhost:8998 2>/dev/null; then
+    echo "  Model A Ready (\${i}0秒)"
+    break
+  fi
+  sleep 5
+done
+
+# Model B (ポート 8999) — Model A の後に起動
 echo "Starting Model B: $MODEL_B"
 docker run -d --gpus all --name moshi-server-b --restart always \
   -p 8999:8999 \
