@@ -50,6 +50,12 @@ def _launch_gpu(event):
     model_repo = event["modelRepo"]
     moshi_port = event["port"]
 
+    # Step 0: 既に running のプリウォームインスタンスがあれば即座に使う
+    for region in FALLBACK_REGIONS:
+        result = _try_running_instance(region, session_id, moshi_port)
+        if result:
+            return result
+
     # Step 1: 停止中のウォームプールインスタンスを探す
     for region in FALLBACK_REGIONS:
         result = _try_warm_start(region, session_id, model_repo, moshi_port)
@@ -77,6 +83,64 @@ def _launch_gpu(event):
         ExpressionAttributeValues={":s": "failed", ":e": "No GPU capacity available"},
     )
     return {"error": "No GPU capacity available"}
+
+
+def _try_running_instance(region, session_id, moshi_port):
+    """既に running の SpeechArena GPU インスタンスを使う（プリウォーミング）"""
+    remote_ec2 = boto3.client("ec2", region_name=region)
+
+    try:
+        result = remote_ec2.describe_instances(
+            Filters=[
+                {"Name": "tag:Project", "Values": ["speech-arena"]},
+                {"Name": "instance-state-name", "Values": ["running"]},
+            ]
+        )
+        running = []
+        for r in result.get("Reservations", []):
+            for inst in r.get("Instances", []):
+                running.append(inst)
+
+        if not running:
+            return None
+
+        instance = running[0]
+        instance_id = instance["InstanceId"]
+        public_ip = instance.get("PublicIpAddress", "")
+
+        if not public_ip:
+            return None
+
+        # ヘルスチェック（既にモデルがロード済みか）
+        import urllib.request
+        try:
+            urllib.request.urlopen(f"http://{public_ip}:{moshi_port}", timeout=5)
+        except Exception:
+            print(f"Running instance {instance_id} not ready on port {moshi_port}")
+            return None
+
+        print(f"Prewarm hit: {instance_id} in {region} (port {moshi_port})")
+
+        # Tunnel URL を取得（SSH で）
+        endpoint_url = f"http://{public_ip}:{moshi_port}"
+
+        table.update_item(
+            Key={"sessionId": session_id},
+            UpdateExpression="SET instanceId = :iid, #r = :r, #s = :s, publicIp = :ip, startedAt = :t",
+            ExpressionAttributeNames={"#r": "region", "#s": "status"},
+            ExpressionAttributeValues={
+                ":iid": instance_id,
+                ":r": region,
+                ":s": "running",
+                ":ip": endpoint_url,
+                ":t": datetime.now(timezone.utc).isoformat(),
+            },
+        )
+        return {"instanceId": instance_id, "region": region, "prewarm": True}
+
+    except Exception as e:
+        print(f"Prewarm check in {region} failed: {e}")
+        return None
 
 
 def _try_warm_start(region, session_id, model_repo, moshi_port):
