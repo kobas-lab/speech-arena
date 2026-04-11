@@ -68,16 +68,45 @@ aws ec2 attach-volume --region $REGION --volume-id $VOLUME_ID --instance-id $INS
 echo "  アタッチを待っています..."
 sleep 15
 
-ssh -o StrictHostKeyChecking=no -i ~/.ssh/speech-arena-gpu.pem ubuntu@$PUBLIC_IP \
-  "sudo mkfs.ext4 /dev/xvdf && sudo mkdir -p /mnt/models && sudo mount /dev/xvdf /mnt/models && sudo chown ubuntu:ubuntu /mnt/models"
+ssh -o StrictHostKeyChecking=no -i ~/.ssh/speech-arena-gpu.pem ubuntu@$PUBLIC_IP bash -s <<'REMOTE_SCRIPT'
+# NVMe インスタンスでは /dev/nvme1n1、従来型では /dev/xvdf
+DEVICE=""
+for d in /dev/nvme1n1 /dev/xvdf; do
+  if [ -b "$d" ]; then
+    DEVICE=$d
+    break
+  fi
+done
+if [ -z "$DEVICE" ]; then
+  echo "ERROR: No additional EBS device found"
+  lsblk
+  exit 1
+fi
+echo "Using device: $DEVICE"
+sudo mkfs.ext4 $DEVICE
+sudo mkdir -p /mnt/models
+sudo mount $DEVICE /mnt/models
+sudo chown ubuntu:ubuntu /mnt/models
+REMOTE_SCRIPT
 echo "  マウント完了"
 
 echo "=== Step 4: モデルをダウンロード ==="
+# 必要なファイルだけ curl で直接ダウンロード
 for MODEL in "${MODELS[@]}"; do
   MODEL_NAME=$(basename "$MODEL")
   echo "  Downloading $MODEL_NAME..."
-  ssh -o StrictHostKeyChecking=no -i ~/.ssh/speech-arena-gpu.pem ubuntu@$PUBLIC_IP \
-    "pip install -q huggingface-hub && HF_TOKEN=$HF_TOKEN huggingface-cli download $MODEL --local-dir /mnt/models/$MODEL_NAME" 2>&1 | tail -3
+  ssh -o StrictHostKeyChecking=no -i ~/.ssh/speech-arena-gpu.pem ubuntu@$PUBLIC_IP bash -s <<DLSCRIPT
+mkdir -p /mnt/models/$MODEL_NAME
+cd /mnt/models/$MODEL_NAME
+for f in model.safetensors tokenizer-e351c8d8-checkpoint125.safetensors tokenizer_spm_32k_3.model moshi_lm_kwargs.json; do
+  if [ ! -f "\$f" ]; then
+    echo "    Downloading \$f..."
+    curl -fsSL -H "Authorization: Bearer $HF_TOKEN" \
+      "https://huggingface.co/$MODEL/resolve/main/\$f" -o "\$f" 2>/dev/null || echo "    Skip: \$f (not found)"
+  fi
+done
+du -sh /mnt/models/$MODEL_NAME/
+DLSCRIPT
   echo "  Done: $MODEL_NAME"
 done
 
@@ -87,7 +116,7 @@ ssh -o StrictHostKeyChecking=no -i ~/.ssh/speech-arena-gpu.pem ubuntu@$PUBLIC_IP
 
 echo "=== Step 6: アンマウント ==="
 ssh -o StrictHostKeyChecking=no -i ~/.ssh/speech-arena-gpu.pem ubuntu@$PUBLIC_IP \
-  "sudo umount /mnt/models"
+  "sudo umount /mnt/models" 2>/dev/null || true
 
 echo "=== Step 7: EBS をデタッチ ==="
 aws ec2 detach-volume --region $REGION --volume-id $VOLUME_ID
