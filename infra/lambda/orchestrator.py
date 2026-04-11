@@ -12,16 +12,16 @@ class DecimalEncoder(json.JSONEncoder):
             return int(o) if o == int(o) else float(o)
         return super().default(o)
 
+
 ec2 = boto3.client("ec2")
 dynamodb = boto3.resource("dynamodb")
 
-# フォールバックリージョン（優先順）
 FALLBACK_REGIONS = ["us-east-1", "ap-northeast-2"]
 
 TABLE_NAME = os.environ["DYNAMODB_TABLE"]
 LAUNCH_TEMPLATE_ID = os.environ["LAUNCH_TEMPLATE_ID"]
 SUBNET_IDS = os.environ["SUBNET_IDS"].split(",")
-SESSION_TIMEOUT_MINUTES = int(os.environ.get("SESSION_TIMEOUT_MINUTES", "15"))
+SESSION_TIMEOUT_MINUTES = int(os.environ.get("SESSION_TIMEOUT_MINUTES", "45"))
 SECURITY_GROUP_GPU_ID = os.environ.get("SECURITY_GROUP_GPU_ID", "")
 
 table = dynamodb.Table(TABLE_NAME)
@@ -29,8 +29,6 @@ table = dynamodb.Table(TABLE_NAME)
 
 def handler(event, context):
     """API Gateway から呼ばれるメインハンドラ（非同期起動もここで処理）"""
-
-    # 非同期で呼ばれた GPU 起動処理
     if event.get("_async_launch"):
         return _launch_gpu(event)
 
@@ -47,47 +45,266 @@ def handler(event, context):
 
 
 def _launch_gpu(event):
-    """非同期で呼ばれる GPU 起動処理（タイムアウト制限なし）"""
+    """非同期で呼ばれる GPU 起動処理"""
     session_id = event["sessionId"]
     model_repo = event["modelRepo"]
     moshi_port = event["port"]
 
-    run_response = None
-    last_error = None
+    # Step 1: 停止中のウォームプールインスタンスを探す
+    for region in FALLBACK_REGIONS:
+        result = _try_warm_start(region, session_id, model_repo, moshi_port)
+        if result:
+            return result
 
-    # 直接リモートリージョン（us-east-1 等）で起動（東京は Spot GPU vCPU 上限 0 のためスキップ）
-    if run_response is None:
-        for fallback_region in FALLBACK_REGIONS:
-            run_response, launched_region = _try_remote_region(
-                fallback_region, session_id, model_repo, moshi_port
+    # Step 2: ウォームプールがなければ新規作成（コールドスタート）
+    for region in FALLBACK_REGIONS:
+        run_response, launched_region = _try_cold_start(region, session_id, model_repo, moshi_port)
+        if run_response:
+            instance_id = run_response["Instances"][0]["InstanceId"]
+            table.update_item(
+                Key={"sessionId": session_id},
+                UpdateExpression="SET instanceId = :iid, #r = :r",
+                ExpressionAttributeNames={"#r": "region"},
+                ExpressionAttributeValues={":iid": instance_id, ":r": launched_region},
             )
-            if run_response:
-                instance_id = run_response["Instances"][0]["InstanceId"]
-                table.update_item(
-                    Key={"sessionId": session_id},
-                    UpdateExpression="SET instanceId = :iid, #r = :r",
-                    ExpressionAttributeNames={"#r": "region"},
-                    ExpressionAttributeValues={":iid": instance_id, ":r": launched_region},
-                )
-                return {"instanceId": instance_id, "region": launched_region}
-            continue
+            return {"instanceId": instance_id, "region": launched_region}
 
-    if run_response is None:
-        table.update_item(
-            Key={"sessionId": session_id},
-            UpdateExpression="SET #s = :s, errorMessage = :e",
-            ExpressionAttributeNames={"#s": "status"},
-            ExpressionAttributeValues={":s": "failed", ":e": str(last_error)},
-        )
-        return {"error": str(last_error)}
-
-    instance_id = run_response["Instances"][0]["InstanceId"]
+    # 全て失敗
     table.update_item(
         Key={"sessionId": session_id},
-        UpdateExpression="SET instanceId = :iid",
-        ExpressionAttributeValues={":iid": instance_id},
+        UpdateExpression="SET #s = :s, errorMessage = :e",
+        ExpressionAttributeNames={"#s": "status"},
+        ExpressionAttributeValues={":s": "failed", ":e": "No GPU capacity available"},
     )
-    return {"instanceId": instance_id}
+    return {"error": "No GPU capacity available"}
+
+
+def _try_warm_start(region, session_id, model_repo, moshi_port):
+    """停止中の SpeechArena GPU インスタンスを再起動（ウォームスタート）"""
+    remote_ec2 = boto3.client("ec2", region_name=region)
+
+    try:
+        result = remote_ec2.describe_instances(
+            Filters=[
+                {"Name": "tag:Project", "Values": ["speech-arena"]},
+                {"Name": "instance-state-name", "Values": ["stopped"]},
+            ]
+        )
+        stopped = []
+        for r in result.get("Reservations", []):
+            for inst in r.get("Instances", []):
+                stopped.append(inst)
+
+        if not stopped:
+            return None
+
+        instance = stopped[0]
+        instance_id = instance["InstanceId"]
+        print(f"Warm start: {instance_id} in {region}")
+
+        # インスタンスを起動
+        remote_ec2.start_instances(InstanceIds=[instance_id])
+
+        # 起動完了を待つ
+        remote_ec2.get_waiter("instance_running").wait(InstanceIds=[instance_id])
+
+        # パブリック IP を取得
+        desc = remote_ec2.describe_instances(InstanceIds=[instance_id])
+        public_ip = desc["Reservations"][0]["Instances"][0].get("PublicIpAddress", "")
+
+        # moshi.server を Docker で起動（モデルは EBS に残っている）
+        # user data は再実行されないので、SSM Run Command で起動
+        ecr_repo_url = f"518024472814.dkr.ecr.{region}.amazonaws.com/speech-arena/moshi-server"
+        hf_token = os.environ.get("HF_TOKEN", "")
+
+        ssm = boto3.client("ssm", region_name=region)
+        ssm.send_command(
+            InstanceIds=[instance_id],
+            DocumentName="AWS-RunShellScript",
+            Parameters={"commands": [f"""
+#!/bin/bash
+set -euxo pipefail
+
+# Docker コンテナを停止・削除（前回の残り）
+docker rm -f moshi-server 2>/dev/null || true
+
+# ECR ログイン
+aws ecr get-login-password --region {region} | docker login --username AWS --password-stdin {ecr_repo_url}
+
+# HF キャッシュのマウント確認
+HF_CACHE_DIR=""
+mkdir -p /mnt/models
+for d in /dev/nvme1n1 /dev/nvme2n1 /dev/nvme3n1 /dev/nvme4n1 /dev/xvdf; do
+  if [ -b "$d" ]; then
+    FS=$(sudo file -s "$d" 2>/dev/null | grep -c ext4 || true)
+    if [ "$FS" -gt 0 ]; then
+      mount $d /mnt/models 2>/dev/null || true
+      if [ -d "/mnt/models/hf_cache" ]; then
+        HF_CACHE_DIR="/mnt/models/hf_cache"
+        break
+      else
+        umount /mnt/models 2>/dev/null || true
+      fi
+    fi
+  fi
+done
+
+# moshi.server を起動
+if [ -n "$HF_CACHE_DIR" ]; then
+  docker run -d --gpus all --name moshi-server \
+    -p {moshi_port}:{moshi_port} \
+    -e HF_TOKEN={hf_token} \
+    -e HUGGING_FACE_HUB_TOKEN={hf_token} \
+    -e HF_HOME=/hf_cache \
+    -v $HF_CACHE_DIR:/hf_cache \
+    {ecr_repo_url}:latest \
+    uv run -m moshi.server --hf-repo {model_repo} --half --port {moshi_port} --host 0.0.0.0 --static /app/static
+else
+  docker run -d --gpus all --name moshi-server \
+    -p {moshi_port}:{moshi_port} \
+    -e HF_TOKEN={hf_token} \
+    -e HUGGING_FACE_HUB_TOKEN={hf_token} \
+    {ecr_repo_url}:latest \
+    uv run -m moshi.server --hf-repo {model_repo} --half --port {moshi_port} --host 0.0.0.0 --static /app/static
+fi
+
+# ヘルスチェック
+for i in $(seq 1 180); do
+  if curl -s -o /dev/null http://localhost:{moshi_port} 2>/dev/null; then
+    echo "Ready after ${{i}} seconds"
+    break
+  fi
+  sleep 5
+done
+
+# Cloudflare Tunnel
+curl -fsSL https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 -o /usr/local/bin/cloudflared 2>/dev/null
+chmod +x /usr/local/bin/cloudflared
+TUNNEL_LOG="/tmp/cloudflared.log"
+pkill cloudflared 2>/dev/null || true
+cloudflared tunnel --url http://localhost:{moshi_port} > $TUNNEL_LOG 2>&1 &
+
+TUNNEL_URL=""
+for i in $(seq 1 30); do
+  TUNNEL_URL=$(grep -oP 'https://[a-z0-9-]+\\.trycloudflare\\.com' $TUNNEL_LOG 2>/dev/null | head -1 || true)
+  [ -n "$TUNNEL_URL" ] && break
+  sleep 1
+done
+[ -z "$TUNNEL_URL" ] && TUNNEL_URL="http://{public_ip}:{moshi_port}"
+
+# DynamoDB 更新
+aws dynamodb update-item \
+  --region ap-northeast-1 \
+  --table-name {TABLE_NAME} \
+  --key '{{"sessionId": {{"S": "{session_id}"}}}}' \
+  --update-expression "SET #s = :s, publicIp = :ip, instanceId = :iid, startedAt = :t" \
+  --expression-attribute-names '{{"#s": "status"}}' \
+  --expression-attribute-values '{{":s": {{"S": "running"}}, ":ip": {{"S": "'$TUNNEL_URL'"}}, ":iid": {{"S": "{instance_id}"}}, ":t": {{"S": "'"$(date -u +%Y-%m-%dT%H:%M:%SZ)"'"}}}}'
+"""]}
+        )
+
+        table.update_item(
+            Key={"sessionId": session_id},
+            UpdateExpression="SET instanceId = :iid, #r = :r",
+            ExpressionAttributeNames={"#r": "region"},
+            ExpressionAttributeValues={":iid": instance_id, ":r": region},
+        )
+        return {"instanceId": instance_id, "region": region, "warmStart": True}
+
+    except Exception as e:
+        print(f"Warm start in {region} failed: {e}")
+        return None
+
+
+def _try_cold_start(region, session_id, model_repo, moshi_port):
+    """リモートリージョンで新規 GPU インスタンスを起動（コールドスタート）"""
+    print(f"Cold start in {region}...")
+    remote_ec2 = boto3.client("ec2", region_name=region)
+
+    try:
+        vpcs = remote_ec2.describe_vpcs(Filters=[{"Name": "isDefault", "Values": ["true"]}])
+        if not vpcs["Vpcs"]:
+            return None, None
+        vpc_id = vpcs["Vpcs"][0]["VpcId"]
+        subnets = remote_ec2.describe_subnets(Filters=[{"Name": "vpc-id", "Values": [vpc_id]}])
+        subnet_ids = [s["SubnetId"] for s in subnets["Subnets"]]
+    except Exception as e:
+        print(f"Failed to get {region} subnets: {e}")
+        return None, None
+
+    sg_name = f"speech-arena-gpu-{region}"
+    try:
+        sg_result = remote_ec2.describe_security_groups(Filters=[{"Name": "group-name", "Values": [sg_name]}])
+        if sg_result["SecurityGroups"]:
+            sg_id = sg_result["SecurityGroups"][0]["GroupId"]
+        else:
+            sg = remote_ec2.create_security_group(GroupName=sg_name, Description=f"SpeechArena GPU ({region})", VpcId=vpc_id)
+            sg_id = sg["GroupId"]
+            remote_ec2.authorize_security_group_ingress(GroupId=sg_id, IpPermissions=[
+                {"IpProtocol": "tcp", "FromPort": 8998, "ToPort": 8999, "IpRanges": [{"CidrIp": "0.0.0.0/0"}]},
+                {"IpProtocol": "tcp", "FromPort": 22, "ToPort": 22, "IpRanges": [{"CidrIp": "0.0.0.0/0"}]},
+            ])
+    except Exception as e:
+        print(f"Failed to setup {region} SG: {e}")
+        return None, None
+
+    try:
+        ami_result = remote_ec2.describe_images(Owners=["amazon"], Filters=[
+            {"Name": "name", "Values": ["Deep Learning Base OSS Nvidia Driver GPU AMI (Ubuntu 22.04) *"]},
+            {"Name": "architecture", "Values": ["x86_64"]},
+        ])
+        if not ami_result["Images"]:
+            return None, None
+        ami_id = sorted(ami_result["Images"], key=lambda x: x["CreationDate"], reverse=True)[0]["ImageId"]
+    except Exception as e:
+        print(f"Failed to get {region} AMI: {e}")
+        return None, None
+
+    ecr_repo_url = f"518024472814.dkr.ecr.{region}.amazonaws.com/speech-arena/moshi-server"
+    snapshot_id = os.environ.get("MODEL_SNAPSHOT_ID", "")
+
+    remote_instance_types = ["g5.xlarge", "g6e.xlarge", "g5.2xlarge"]
+    for inst_type in remote_instance_types:
+        for subnet_id in subnet_ids:
+            try:
+                block_devices = [{"DeviceName": "/dev/sda1", "Ebs": {"VolumeSize": 100, "VolumeType": "gp3"}}]
+                if snapshot_id:
+                    block_devices.append({
+                        "DeviceName": "/dev/xvdf",
+                        "Ebs": {"SnapshotId": snapshot_id, "VolumeSize": 200, "VolumeType": "gp3", "DeleteOnTermination": False},
+                    })
+
+                run_response = remote_ec2.run_instances(
+                    ImageId=ami_id,
+                    InstanceType=inst_type,
+                    MinCount=1, MaxCount=1,
+                    SubnetId=subnet_id,
+                    SecurityGroupIds=[sg_id],
+                    IamInstanceProfile={"Name": "speech-arena-gpu-instance"},
+                    KeyName="speech-arena-gpu",
+                    BlockDeviceMappings=block_devices,
+                    InstanceMarketOptions={
+                        "MarketType": "spot",
+                        "SpotOptions": {"SpotInstanceType": "persistent", "MaxPrice": "1.50"},
+                    },
+                    UserData=_build_userdata(session_id, model_repo, moshi_port, region, ecr_repo_url),
+                    TagSpecifications=[{
+                        "ResourceType": "instance",
+                        "Tags": [
+                            {"Key": "Name", "Value": f"speech-arena-gpu"},
+                            {"Key": "SessionId", "Value": session_id},
+                            {"Key": "Project", "Value": "speech-arena"},
+                            {"Key": "Region", "Value": region},
+                        ],
+                    }],
+                )
+                print(f"{region} success: {inst_type} in {subnet_id}")
+                return run_response, region
+            except Exception as e:
+                print(f"{region} {inst_type} in {subnet_id} failed: {e}")
+                continue
+
+    return None, None
 
 
 def start_session(event, context):
@@ -99,7 +316,6 @@ def start_session(event, context):
     session_id = f"sess-{int(time.time() * 1000)}"
     expires_at = int((datetime.now(timezone.utc) + timedelta(hours=2)).timestamp())
 
-    # DynamoDB にセッションを作成
     table.put_item(Item={
         "sessionId": session_id,
         "status": "starting",
@@ -109,11 +325,10 @@ def start_session(event, context):
         "expiresAt": expires_at,
     })
 
-    # Lambda を非同期で呼び出して GPU 起動（API Gateway の30秒制限を回避）
     lambda_client = boto3.client("lambda")
     lambda_client.invoke(
-        FunctionName=os.environ.get("LAUNCH_FUNCTION_NAME", context.function_name),
-        InvocationType="Event",  # 非同期
+        FunctionName=context.function_name,
+        InvocationType="Event",
         Payload=json.dumps({
             "_async_launch": True,
             "sessionId": session_id,
@@ -122,22 +337,17 @@ def start_session(event, context):
         }),
     )
 
-    return response(201, {
-        "sessionId": session_id,
-        "status": "starting",
-    })
+    return response(201, {"sessionId": session_id, "status": "starting"})
 
 
 def get_session(session_id):
-    """セッションの状態を返す（フロントがポーリング）"""
+    """セッションの状態を返す"""
     result = table.get_item(Key={"sessionId": session_id})
     item = result.get("Item")
-
     if not item:
         return response(404, {"error": "Session not found"})
 
     public_ip = item.get("publicIp", "")
-    # Tunnel URL (https://...) の場合はそのまま返す
     if public_ip and public_ip.startswith("http"):
         endpoint_url = public_ip
     elif public_ip:
@@ -155,21 +365,19 @@ def get_session(session_id):
 
 
 def cleanup_handler(event, context):
-    """定期実行: タイムアウトしたセッションの GPU を停止"""
+    """定期実行: アイドルセッションの GPU を停止（terminate ではなく stop）"""
     threshold = datetime.now(timezone.utc) - timedelta(minutes=SESSION_TIMEOUT_MINUTES)
 
-    # status=running のセッションを取得
     result = table.query(
         IndexName="status-index",
         KeyConditionExpression=boto3.dynamodb.conditions.Key("status").eq("running"),
     )
 
-    terminated = 0
+    stopped = 0
     for item in result.get("Items", []):
         last_activity = item.get("lastActivityAt", item.get("startedAt", ""))
         if not last_activity:
             continue
-
         try:
             last_time = datetime.fromisoformat(last_activity.replace("Z", "+00:00"))
         except (ValueError, TypeError):
@@ -179,161 +387,33 @@ def cleanup_handler(event, context):
             instance_id = item.get("instanceId")
             if instance_id:
                 try:
-                    region = item.get("region", "ap-northeast-1")
-                    ec2_client = ec2 if region == "ap-northeast-1" else boto3.client("ec2", region_name=region)
-                    ec2_client.terminate_instances(InstanceIds=[instance_id])
+                    region = item.get("region", "us-east-1")
+                    ec2_client = boto3.client("ec2", region_name=region)
+                    # terminate ではなく stop（ウォームプール）
+                    ec2_client.stop_instances(InstanceIds=[instance_id])
                     table.update_item(
                         Key={"sessionId": item["sessionId"]},
-                        UpdateExpression="SET #s = :s, terminatedAt = :t",
+                        UpdateExpression="SET #s = :s, stoppedAt = :t",
                         ExpressionAttributeNames={"#s": "status"},
                         ExpressionAttributeValues={
-                            ":s": "terminated",
+                            ":s": "stopped",
                             ":t": datetime.now(timezone.utc).isoformat(),
                         },
                     )
-                    terminated += 1
+                    stopped += 1
+                    print(f"Stopped {instance_id} (session {item['sessionId']})")
                 except Exception as e:
-                    print(f"Failed to terminate {instance_id}: {e}")
+                    print(f"Failed to stop {instance_id}: {e}")
 
-    return {"terminated": terminated}
-
-
-def _try_remote_region(region, session_id, model_repo, moshi_port):
-    """リモートリージョンで GPU 起動を試行"""
-    print(f"Trying region {region}...")
-    remote_ec2 = boto3.client("ec2", region_name=region)
-
-    # デフォルト VPC のサブネットを取得
-    try:
-        vpcs = remote_ec2.describe_vpcs(Filters=[{"Name": "isDefault", "Values": ["true"]}])
-        if not vpcs["Vpcs"]:
-            print(f"No default VPC in {region}")
-            return None, None
-        vpc_id = vpcs["Vpcs"][0]["VpcId"]
-
-        subnets = remote_ec2.describe_subnets(Filters=[{"Name": "vpc-id", "Values": [vpc_id]}])
-        subnet_ids = [s["SubnetId"] for s in subnets["Subnets"]]
-    except Exception as e:
-        print(f"Failed to get {region} subnets: {e}")
-        return None, None
-
-    # セキュリティグループを作成（または既存を取得）
-    sg_name = f"speech-arena-gpu-{region}"
-    try:
-        sg_result = remote_ec2.describe_security_groups(
-            Filters=[{"Name": "group-name", "Values": [sg_name]}]
-        )
-        if sg_result["SecurityGroups"]:
-            sg_id = sg_result["SecurityGroups"][0]["GroupId"]
-        else:
-            sg = remote_ec2.create_security_group(
-                GroupName=sg_name,
-                Description=f"SpeechArena GPU instances ({region})",
-                VpcId=vpc_id,
-            )
-            sg_id = sg["GroupId"]
-            remote_ec2.authorize_security_group_ingress(
-                GroupId=sg_id,
-                IpPermissions=[
-                    {"IpProtocol": "tcp", "FromPort": 8998, "ToPort": 8999,
-                     "IpRanges": [{"CidrIp": "0.0.0.0/0"}]},
-                    {"IpProtocol": "tcp", "FromPort": 22, "ToPort": 22,
-                     "IpRanges": [{"CidrIp": "0.0.0.0/0"}]},
-                ],
-            )
-    except Exception as e:
-        print(f"Failed to setup {region} SG: {e}")
-        return None, None
-
-    # Deep Learning AMI を取得
-    try:
-        ami_result = remote_ec2.describe_images(
-            Owners=["amazon"],
-            Filters=[
-                {"Name": "name", "Values": ["Deep Learning Base OSS Nvidia Driver GPU AMI (Ubuntu 22.04) *"]},
-                {"Name": "architecture", "Values": ["x86_64"]},
-            ],
-        )
-        if not ami_result["Images"]:
-            print(f"No Deep Learning AMI found in {region}")
-            return None, None
-        ami_id = sorted(ami_result["Images"], key=lambda x: x["CreationDate"], reverse=True)[0]["ImageId"]
-    except Exception as e:
-        print(f"Failed to get {region} AMI: {e}")
-        return None, None
-
-    # ECR リポジトリ URL（リージョンに合わせて変更）
-    ecr_repo_url = f"518024472814.dkr.ecr.{region}.amazonaws.com/speech-arena/moshi-server"
-
-    # 起動試行
-    remote_instance_types = ["g5.xlarge", "g6e.xlarge", "g5.2xlarge"]
-    for inst_type in remote_instance_types:
-        for subnet_id in subnet_ids:
-            try:
-                run_response = remote_ec2.run_instances(
-                    ImageId=ami_id,
-                    InstanceType=inst_type,
-                    MinCount=1,
-                    MaxCount=1,
-                    SubnetId=subnet_id,
-                    SecurityGroupIds=[sg_id],
-                    IamInstanceProfile={"Name": "speech-arena-gpu-instance"},
-                    KeyName="speech-arena-gpu",
-                    BlockDeviceMappings=[
-                        {
-                            "DeviceName": "/dev/sda1",
-                            "Ebs": {"VolumeSize": 100, "VolumeType": "gp3"},
-                        },
-                        {
-                            "DeviceName": "/dev/xvdf",
-                            "Ebs": {
-                                "SnapshotId": os.environ.get("MODEL_SNAPSHOT_ID", ""),
-                                "VolumeSize": 100,
-                                "VolumeType": "gp3",
-                                "DeleteOnTermination": True,
-                            },
-                        },
-                    ] if os.environ.get("MODEL_SNAPSHOT_ID") else [{
-                        "DeviceName": "/dev/sda1",
-                        "Ebs": {"VolumeSize": 100, "VolumeType": "gp3"},
-                    }],
-                    InstanceMarketOptions={
-                        "MarketType": "spot",
-                        "SpotOptions": {"SpotInstanceType": "one-time", "MaxPrice": "1.50"},
-                    },
-                    UserData=_build_userdata_override(
-                        session_id, model_repo, moshi_port,
-                        region=region, ecr_repo_url=ecr_repo_url,
-                    ),
-                    TagSpecifications=[
-                        {
-                            "ResourceType": "instance",
-                            "Tags": [
-                                {"Key": "Name", "Value": f"speech-arena-gpu-{session_id}"},
-                                {"Key": "SessionId", "Value": session_id},
-                                {"Key": "Project", "Value": "speech-arena"},
-                                {"Key": "Region", "Value": region},
-                            ],
-                        }
-                    ],
-                )
-                print(f"{region} success: {inst_type} in {subnet_id}")
-                return run_response, region
-            except Exception as e:
-                print(f"{region} {inst_type} in {subnet_id} failed: {e}")
-                continue
-
-    return None, None
+    return {"stopped": stopped}
 
 
-def _build_userdata_override(session_id, model_repo, port, region=None, ecr_repo_url=None):
-    """user data スクリプトを生成（boto3 が自動で base64 エンコードするので生テキストを返す）"""
+def _build_userdata(session_id, model_repo, port, region, ecr_repo_url):
+    """user data スクリプトを生成"""
     hf_token = os.environ.get("HF_TOKEN", "")
     dynamodb_table = TABLE_NAME
 
-    if region and ecr_repo_url:
-        # リモートリージョン用: 完全な起動スクリプト
-        script = f"""#!/bin/bash
+    script = f"""#!/bin/bash
 set -euxo pipefail
 
 ECR_REPO_URL="{ecr_repo_url}"
@@ -347,8 +427,7 @@ TOKEN=$(curl -s -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-m
 INSTANCE_ID=$(curl -s -H "X-aws-ec2-metadata-token: $TOKEN" http://169.254.169.254/latest/meta-data/instance-id)
 PUBLIC_IP=$(curl -s -H "X-aws-ec2-metadata-token: $TOKEN" http://169.254.169.254/latest/meta-data/public-ipv4)
 
-# モデルボリュームをマウント（EBS スナップショットからアタッチ済みの場合）
-# NVMe インスタンスではデバイス番号が変わるので、ext4 ファイルシステムで識別
+# HF キャッシュのマウント
 HF_CACHE_DIR=""
 mkdir -p /mnt/models
 for d in /dev/nvme1n1 /dev/nvme2n1 /dev/nvme3n1 /dev/nvme4n1 /dev/xvdf; do
@@ -359,7 +438,7 @@ for d in /dev/nvme1n1 /dev/nvme2n1 /dev/nvme3n1 /dev/nvme4n1 /dev/xvdf; do
       mount $d /mnt/models 2>/dev/null || true
       if [ -d "/mnt/models/hf_cache" ]; then
         HF_CACHE_DIR="/mnt/models/hf_cache"
-        echo "HF cache found: $(ls /mnt/models/hf_cache/ | head -5)"
+        echo "HF cache found"
         break
       else
         umount /mnt/models 2>/dev/null || true
@@ -382,64 +461,46 @@ fi
 # ECR ログイン
 aws ecr get-login-password --region {region} | docker login --username AWS --password-stdin $ECR_REPO_URL
 
-# Docker pull
+# Docker pull & run
 docker pull $ECR_REPO_URL:latest
-
-# moshi.server を起動（EBS キャッシュがあれば HF_HOME をマウント）
-if [ -n "$HF_CACHE_DIR" ] && [ -d "$HF_CACHE_DIR" ]; then
-  echo "Using HF cache from EBS: $HF_CACHE_DIR"
+if [ -n "$HF_CACHE_DIR" ]; then
   docker run -d --gpus all --name moshi-server \\
     -p $MOSHI_PORT:$MOSHI_PORT \\
-    -e HF_TOKEN=$HF_TOKEN \\
-    -e HUGGING_FACE_HUB_TOKEN=$HF_TOKEN \\
-    -e HF_HOME=/hf_cache \\
-    -v $HF_CACHE_DIR:/hf_cache \\
+    -e HF_TOKEN=$HF_TOKEN -e HUGGING_FACE_HUB_TOKEN=$HF_TOKEN \\
+    -e HF_HOME=/hf_cache -v $HF_CACHE_DIR:/hf_cache \\
     $ECR_REPO_URL:latest \\
     uv run -m moshi.server --hf-repo $MODEL_REPO --half --port $MOSHI_PORT --host 0.0.0.0 --static /app/static
 else
-  echo "No EBS cache, downloading from HuggingFace"
   docker run -d --gpus all --name moshi-server \\
     -p $MOSHI_PORT:$MOSHI_PORT \\
-    -e HF_TOKEN=$HF_TOKEN \\
-    -e HUGGING_FACE_HUB_TOKEN=$HF_TOKEN \\
+    -e HF_TOKEN=$HF_TOKEN -e HUGGING_FACE_HUB_TOKEN=$HF_TOKEN \\
     $ECR_REPO_URL:latest \\
     uv run -m moshi.server --hf-repo $MODEL_REPO --half --port $MOSHI_PORT --host 0.0.0.0 --static /app/static
 fi
 
-# moshi.server が実際に listen するまで待つ（最大15分）
-echo "Waiting for moshi.server to be ready..."
+# ヘルスチェック
 for i in $(seq 1 180); do
-  if curl -s -o /dev/null -w '' http://localhost:$MOSHI_PORT 2>/dev/null; then
-    echo "moshi.server is ready after ${{i}}0 seconds"
+  if curl -s -o /dev/null http://localhost:$MOSHI_PORT 2>/dev/null; then
+    echo "moshi.server ready after ${{i}}0 seconds"
     break
   fi
   sleep 5
 done
 
-# Cloudflare Tunnel をインストール＆起動（HTTPS 化）
-echo "Starting Cloudflare Tunnel..."
+# Cloudflare Tunnel
 curl -fsSL https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 -o /usr/local/bin/cloudflared
 chmod +x /usr/local/bin/cloudflared
 TUNNEL_LOG="/tmp/cloudflared.log"
 cloudflared tunnel --url http://localhost:$MOSHI_PORT > $TUNNEL_LOG 2>&1 &
-TUNNEL_PID=$!
-
-# Tunnel URL を取得（最大30秒待機）
 TUNNEL_URL=""
 for i in $(seq 1 30); do
   TUNNEL_URL=$(grep -oP 'https://[a-z0-9-]+\\.trycloudflare\\.com' $TUNNEL_LOG 2>/dev/null | head -1 || true)
-  if [ -n "$TUNNEL_URL" ]; then
-    echo "Tunnel URL: $TUNNEL_URL"
-    break
-  fi
+  [ -n "$TUNNEL_URL" ] && break
   sleep 1
 done
-if [ -z "$TUNNEL_URL" ]; then
-  echo "WARNING: Failed to get tunnel URL, using IP"
-  TUNNEL_URL="http://$PUBLIC_IP:$MOSHI_PORT"
-fi
+[ -z "$TUNNEL_URL" ] && TUNNEL_URL="http://$PUBLIC_IP:$MOSHI_PORT"
 
-# DynamoDB 更新（Tunnel URL を publicIp フィールドに保存）
+# DynamoDB 更新
 aws dynamodb update-item \\
   --region ap-northeast-1 \\
   --table-name {dynamodb_table} \\
@@ -447,18 +508,6 @@ aws dynamodb update-item \\
   --update-expression "SET #s = :s, publicIp = :ip, instanceId = :iid, startedAt = :t" \\
   --expression-attribute-names '{{"#s": "status"}}' \\
   --expression-attribute-values '{{":s": {{"S": "running"}}, ":ip": {{"S": "'$TUNNEL_URL'"}}, ":iid": {{"S": "'$INSTANCE_ID'"}}, ":t": {{"S": "'$(date -u +%Y-%m-%dT%H:%M:%SZ)'"}}}}'
-
-# 安全装置: 30分後に自動シャットダウン
-# 安全装置: 30分後に自動終了（terminate）
-REGION=$(curl -s -H "X-aws-ec2-metadata-token: $TOKEN" http://169.254.169.254/latest/meta-data/placement/region)
-(sleep 3600 && aws ec2 terminate-instances --region $REGION --instance-ids $INSTANCE_ID) &
-"""
-    else:
-        # 東京用: Launch Template の user data を上書きする環境変数のみ
-        script = f"""#!/bin/bash
-export SESSION_ID="{session_id}"
-export MODEL_REPO="{model_repo}"
-export MOSHI_PORT="{port}"
 """
     return script
 
