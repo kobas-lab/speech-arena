@@ -98,14 +98,15 @@ if ! command -v nvidia-container-runtime &> /dev/null; then
 fi
 
 # HF キャッシュディレクトリ
-mkdir -p /opt/hf_cache
+sudo mkdir -p /opt/hf_cache
+sudo chown ubuntu:ubuntu /opt/hf_cache
 
 # ECR ログイン
 aws ecr get-login-password --region $REGION | docker login --username AWS --password-stdin $ECR_REPO
 docker pull $ECR_REPO:latest
 
-# 既存コンテナを停止
-docker rm -f moshi-server-a moshi-server-b 2>/dev/null || true
+# 既存コンテナを全て停止
+docker rm -f moshi-server moshi-server-a moshi-server-b 2>/dev/null || true
 
 # Model A (ポート 8998)
 echo "Starting Model A: $MODEL_A"
@@ -127,8 +128,8 @@ docker run -d --gpus all --name moshi-server-b --restart always \
 
 # Cloudflare Tunnel
 if ! command -v cloudflared &> /dev/null; then
-  curl -fsSL https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 -o /usr/local/bin/cloudflared
-  chmod +x /usr/local/bin/cloudflared
+  sudo curl -fsSL https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 -o /usr/local/bin/cloudflared
+  sudo chmod +x /usr/local/bin/cloudflared
 fi
 pkill cloudflared 2>/dev/null || true
 nohup cloudflared tunnel --url http://localhost:8998 > /tmp/tunnel-a.log 2>&1 &
