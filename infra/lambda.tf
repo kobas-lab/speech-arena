@@ -4,7 +4,7 @@ resource "aws_lambda_function" "orchestrator" {
   role             = aws_iam_role.lambda_orchestrator.arn
   handler          = "orchestrator.handler"
   runtime          = "python3.12"
-  timeout          = 300
+  timeout          = 900
   memory_size      = 256
   filename         = "${path.module}/lambda/orchestrator.zip"
   source_code_hash = filebase64sha256("${path.module}/lambda/orchestrator.zip")
@@ -18,6 +18,7 @@ resource "aws_lambda_function" "orchestrator" {
       SECURITY_GROUP_GPU_ID     = aws_security_group.gpu.id
       GPU_INSTANCE_PROFILE_ARN  = aws_iam_instance_profile.gpu_instance.arn
       HF_TOKEN                  = var.hf_token
+      MODEL_SNAPSHOT_ID         = var.model_snapshot_id
     }
   }
 }

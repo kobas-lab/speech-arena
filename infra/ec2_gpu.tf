@@ -106,7 +106,7 @@ resource "aws_launch_template" "gpu" {
     }
   }
 
-  instance_initiated_shutdown_behavior = "terminate"
+  instance_initiated_shutdown_behavior = "stop"
 
   metadata_options {
     http_tokens = "required" # IMDSv2

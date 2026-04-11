@@ -12,6 +12,26 @@ TOKEN=$(curl -s -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-m
 INSTANCE_ID=$(curl -s -H "X-aws-ec2-metadata-token: $TOKEN" http://169.254.169.254/latest/meta-data/instance-id)
 PUBLIC_IP=$(curl -s -H "X-aws-ec2-metadata-token: $TOKEN" http://169.254.169.254/latest/meta-data/public-ipv4)
 
+# モデルボリュームをマウント（EBS スナップショットからアタッチ済みの場合）
+HF_CACHE_DIR=""
+mkdir -p /mnt/models
+for d in /dev/nvme1n1 /dev/nvme2n1 /dev/nvme3n1 /dev/nvme4n1 /dev/xvdf; do
+  if [ -b "$d" ]; then
+    FS=$(sudo file -s "$d" 2>/dev/null | grep -c ext4 || true)
+    if [ "$FS" -gt 0 ]; then
+      echo "Mounting model volume: $d"
+      mount $d /mnt/models 2>/dev/null || true
+      if [ -d "/mnt/models/hf_cache" ]; then
+        HF_CACHE_DIR="/mnt/models/hf_cache"
+        echo "HF cache found: $(ls /mnt/models/hf_cache/ | head -5)"
+        break
+      else
+        umount /mnt/models 2>/dev/null || true
+      fi
+    fi
+  fi
+done
+
 # nvidia-container-toolkit のインストール（未インストールの場合）
 if ! command -v nvidia-container-runtime &> /dev/null; then
   curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey | gpg --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg
@@ -35,14 +55,28 @@ SESSION_ID=$${SESSION_ID:-$INSTANCE_ID}
 MODEL_REPO=$${MODEL_REPO:-"abePclWaseda/llm-jp-moshi-v1"}
 MOSHI_PORT=$${MOSHI_PORT:-8998}
 
-# moshi.server コンテナを起動（HuggingFace からモデルダウンロード）
-docker run -d --gpus all \
-  --name moshi-server \
-  -p $MOSHI_PORT:$MOSHI_PORT \
-  -e HF_TOKEN=$HF_TOKEN \
-  -e HUGGING_FACE_HUB_TOKEN=$HF_TOKEN \
-  $ECR_REPO_URL:latest \
-  uv run -m moshi.server --hf-repo $MODEL_REPO --half --port $MOSHI_PORT --host 0.0.0.0 --static /app/static
+# moshi.server コンテナを起動（EBS キャッシュがあれば HF_HOME をマウント）
+if [ -n "$HF_CACHE_DIR" ] && [ -d "$HF_CACHE_DIR" ]; then
+  echo "Using HF cache from EBS: $HF_CACHE_DIR"
+  docker run -d --gpus all \
+    --name moshi-server \
+    -p $MOSHI_PORT:$MOSHI_PORT \
+    -e HF_TOKEN=$HF_TOKEN \
+    -e HUGGING_FACE_HUB_TOKEN=$HF_TOKEN \
+    -e HF_HOME=/hf_cache \
+    -v $HF_CACHE_DIR:/hf_cache \
+    $ECR_REPO_URL:latest \
+    uv run -m moshi.server --hf-repo $MODEL_REPO --half --port $MOSHI_PORT --host 0.0.0.0 --static /app/static
+else
+  echo "No EBS cache, downloading from HuggingFace"
+  docker run -d --gpus all \
+    --name moshi-server \
+    -p $MOSHI_PORT:$MOSHI_PORT \
+    -e HF_TOKEN=$HF_TOKEN \
+    -e HUGGING_FACE_HUB_TOKEN=$HF_TOKEN \
+    $ECR_REPO_URL:latest \
+    uv run -m moshi.server --hf-repo $MODEL_REPO --half --port $MOSHI_PORT --host 0.0.0.0 --static /app/static
+fi
 
 # moshi.server が実際に listen するまで待つ（最大15分）
 echo "Waiting for moshi.server to be ready..."
@@ -87,4 +121,4 @@ aws dynamodb update-item \
 
 # 安全装置: 30分後に自動シャットダウン
 # 安全装置: 30分後に自動終了（terminate）
-(sleep 3600 && aws ec2 terminate-instances --region $(curl -s -H "X-aws-ec2-metadata-token: $TOKEN" http://169.254.169.254/latest/meta-data/placement/region) --instance-ids $INSTANCE_ID) &
+(sleep 3600 && aws ec2 stop-instances --region $(curl -s -H "X-aws-ec2-metadata-token: $TOKEN" http://169.254.169.254/latest/meta-data/placement/region) --instance-ids $INSTANCE_ID) &

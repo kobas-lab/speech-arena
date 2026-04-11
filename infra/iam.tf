@@ -28,6 +28,8 @@ resource "aws_iam_role_policy" "lambda_orchestrator" {
         Action = [
           "ec2:RunInstances",
           "ec2:TerminateInstances",
+          "ec2:StartInstances",
+          "ec2:StopInstances",
           "ec2:DescribeInstances",
           "ec2:DescribeSubnets",
           "ec2:DescribeVpcs",
@@ -73,6 +75,14 @@ resource "aws_iam_role_policy" "lambda_orchestrator" {
         Action   = "lambda:InvokeFunction"
         Resource = "arn:aws:lambda:*:*:function:${var.project_name}-*"
       },
+      {
+        Effect = "Allow"
+        Action = [
+          "ssm:SendCommand",
+          "ssm:GetCommandInvocation",
+        ]
+        Resource = "*"
+      },
     ]
   })
 }
@@ -108,6 +118,17 @@ resource "aws_iam_role_policy" "gpu_instance" {
           "ecr:GetAuthorizationToken",
           "ecr:BatchGetImage",
           "ecr:GetDownloadUrlForLayer",
+        ]
+        Resource = "*"
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "ssm:UpdateInstanceInformation",
+          "ssmmessages:CreateControlChannel",
+          "ssmmessages:CreateDataChannel",
+          "ssmmessages:OpenControlChannel",
+          "ssmmessages:OpenDataChannel",
         ]
         Resource = "*"
       },
