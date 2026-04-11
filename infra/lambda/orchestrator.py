@@ -453,9 +453,8 @@ Requires=docker.service
 [Service]
 Type=oneshot
 RemainAfterExit=yes
-ExecStartPre=/bin/bash -c 'docker rm -f moshi-server 2>/dev/null || true'
 ExecStart=/bin/bash -c 'docker start moshi-server 2>/dev/null || docker run -d --gpus all --name moshi-server -p $MOSHI_PORT:$MOSHI_PORT -e HF_TOKEN=$HF_TOKEN -e HUGGING_FACE_HUB_TOKEN=$HF_TOKEN $ECR_REPO_URL:latest uv run -m moshi.server --hf-repo $MODEL_REPO --half --port $MOSHI_PORT --host 0.0.0.0 --static /app/static'
-ExecStop=/bin/bash -c 'docker stop moshi-server'
+ExecStop=/bin/bash -c 'docker stop moshi-server 2>/dev/null || true'
 
 [Install]
 WantedBy=multi-user.target
