@@ -81,10 +81,33 @@ def _launch_gpu(event):
 
 def _try_warm_start(region, session_id, model_repo, moshi_port):
     """停止中の SpeechArena GPU インスタンスを再起動（ウォームスタート）
-    systemd サービスが自動で moshi.server を起動するので、Start するだけ"""
+    Docker --restart always で自動的にコンテナが再起動するので、Start するだけ"""
     remote_ec2 = boto3.client("ec2", region_name=region)
 
     try:
+        # 既に使用中のインスタンス ID を取得（同時起動で同じインスタンスを選ばないように）
+        used_instances = set()
+        try:
+            sessions = table.query(
+                IndexName="status-index",
+                KeyConditionExpression=boto3.dynamodb.conditions.Key("status").eq("starting"),
+            )
+            for s in sessions.get("Items", []):
+                iid = s.get("instanceId")
+                if iid:
+                    used_instances.add(iid)
+            # running のインスタンスも除外
+            running_sessions = table.query(
+                IndexName="status-index",
+                KeyConditionExpression=boto3.dynamodb.conditions.Key("status").eq("running"),
+            )
+            for s in running_sessions.get("Items", []):
+                iid = s.get("instanceId")
+                if iid:
+                    used_instances.add(iid)
+        except Exception:
+            pass
+
         result = remote_ec2.describe_instances(
             Filters=[
                 {"Name": "tag:Project", "Values": ["speech-arena"]},
@@ -94,7 +117,8 @@ def _try_warm_start(region, session_id, model_repo, moshi_port):
         stopped = []
         for r in result.get("Reservations", []):
             for inst in r.get("Instances", []):
-                stopped.append(inst)
+                if inst["InstanceId"] not in used_instances:
+                    stopped.append(inst)
 
         if not stopped:
             return None
