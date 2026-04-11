@@ -355,6 +355,9 @@ if [ -n "$MDISK" ]; then
   mkdir -p /mnt/models
   mount $MDISK /mnt/models 2>/dev/null || true
   echo "Model volume: $(ls /mnt/models/ 2>/dev/null)"
+  HF_CACHE_DIR="/mnt/models/hf_cache"
+else
+  HF_CACHE_DIR=""
 fi
 
 # nvidia-container-toolkit
@@ -374,26 +377,26 @@ aws ecr get-login-password --region {region} | docker login --username AWS --pas
 # Docker pull
 docker pull $ECR_REPO_URL:latest
 
-# モデルボリュームをマウント（EBS スナップショットから作成されたボリューム）
-MODEL_NAME=$(echo $MODEL_REPO | cut -d/ -f2)
-if [ -d "/mnt/models/$MODEL_NAME" ]; then
-  echo "Using pre-loaded model from EBS: /mnt/models/$MODEL_NAME"
-  MODEL_ARGS="--moshi-weight /models/$MODEL_NAME/model.safetensors --tokenizer /models/$MODEL_NAME/tokenizer_spm_32k_3.model"
-  VOLUME_MOUNT="-v /mnt/models/$MODEL_NAME:/models/$MODEL_NAME"
+# moshi.server を起動（EBS キャッシュがあれば HF_HOME をマウント）
+if [ -n "$HF_CACHE_DIR" ] && [ -d "$HF_CACHE_DIR" ]; then
+  echo "Using HF cache from EBS: $HF_CACHE_DIR"
+  docker run -d --gpus all --name moshi-server \\
+    -p $MOSHI_PORT:$MOSHI_PORT \\
+    -e HF_TOKEN=$HF_TOKEN \\
+    -e HUGGING_FACE_HUB_TOKEN=$HF_TOKEN \\
+    -e HF_HOME=/hf_cache \\
+    -v $HF_CACHE_DIR:/hf_cache \\
+    $ECR_REPO_URL:latest \\
+    uv run -m moshi.server --hf-repo $MODEL_REPO --half --port $MOSHI_PORT --host 0.0.0.0 --static /app/static
 else
-  echo "Model not found on EBS, falling back to HuggingFace download"
-  MODEL_ARGS="--hf-repo $MODEL_REPO"
-  VOLUME_MOUNT=""
+  echo "No EBS cache, downloading from HuggingFace"
+  docker run -d --gpus all --name moshi-server \\
+    -p $MOSHI_PORT:$MOSHI_PORT \\
+    -e HF_TOKEN=$HF_TOKEN \\
+    -e HUGGING_FACE_HUB_TOKEN=$HF_TOKEN \\
+    $ECR_REPO_URL:latest \\
+    uv run -m moshi.server --hf-repo $MODEL_REPO --half --port $MOSHI_PORT --host 0.0.0.0 --static /app/static
 fi
-
-# moshi.server を起動
-docker run -d --gpus all --name moshi-server \\
-  -p $MOSHI_PORT:$MOSHI_PORT \\
-  -e HF_TOKEN=$HF_TOKEN \\
-  -e HUGGING_FACE_HUB_TOKEN=$HF_TOKEN \\
-  $VOLUME_MOUNT \\
-  $ECR_REPO_URL:latest \\
-  uv run -m moshi.server $MODEL_ARGS --half --port $MOSHI_PORT --host 0.0.0.0 --static /app/static
 
 # moshi.server が実際に listen するまで待つ（最大15分）
 echo "Waiting for moshi.server to be ready..."
