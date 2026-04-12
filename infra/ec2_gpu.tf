@@ -101,7 +101,7 @@ resource "aws_launch_template" "gpu" {
   block_device_mappings {
     device_name = "/dev/sda1"
     ebs {
-      volume_size = 100 # GB（モデル15GB + Docker イメージ + OS）
+      volume_size = 200 # GB（2モデル + HF キャッシュ + Docker イメージ + OS）
       volume_type = "gp3"
     }
   }
