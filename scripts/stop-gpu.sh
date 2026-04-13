@@ -25,4 +25,4 @@ for id in $INSTANCES; do
 done
 
 echo "完了（インスタンスは stopped 状態で保持されます）"
-echo "EBS 代のみ課金（~$8/月）"
+echo "EBS 代のみ課金（~\$16/月）"
