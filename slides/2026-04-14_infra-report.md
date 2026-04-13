@@ -3,7 +3,7 @@ marp: true
 theme: default
 paginate: true
 header: "SpeechArena インフラ運用報告"
-footer: "2026-04-13"
+footer: "2026-04-14"
 style: |
   section {
     font-size: 24px;
@@ -33,7 +33,7 @@ style: |
 
 LLM-jp Moshi 音声対話モデルの A/B 評価基盤
 
-2026-04-13
+2026-04-14
 
 ---
 
@@ -186,7 +186,7 @@ g6e.xlarge (us-east-1, on-demand) = **$1.86/h**
 
 ---
 
-## 補足: 既存 GitHub Issue
+## 補足: 既存 GitHub Issue (1/2)
 
 **必須（公開前）**
 - #3 認証機能
@@ -198,6 +198,10 @@ g6e.xlarge (us-east-1, on-demand) = **$1.86/h**
 - #8 Bradley-Terry ランキング
 - #10 音声録音 → S3
 - #9 自動会話成功判定
+
+---
+
+## 補足: 既存 GitHub Issue (2/2)
 
 **運用・拡張**
 - #5 同時接続数制御
