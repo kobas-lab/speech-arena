@@ -6,3 +6,6 @@ client-src/node_modules
 client-src/dist
 docker/moshi-server/client
 scripts/.env
+
+# Claude Code ローカル状態
+.claude/
