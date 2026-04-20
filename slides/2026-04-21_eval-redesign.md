@@ -1,110 +1,109 @@
 ---
 marp: true
-paginate: true
 theme: default
-header: "SpeechArena 評価指標の再設計"
-footer: "2026-04-21"
+paginate: true
 style: |
+  @auto-scaling true;
   :root {
-    --fg: #1b1f23;
-    --bg: #ffffff;
-    --muted: #6b7280;
-    --line: #e5e7eb;
-    --accent: #1f4e79;
-    --accent-soft: #eef2f7;
+    --accent: #2563eb;
+    --accent-light: #dbeafe;
+    --accent2: #7c3aed;
+    --accent3: #059669;
+    --gray: #64748b;
+    --gray-light: #f1f5f9;
   }
-
   section {
-    font-family: 'Hiragino Sans', 'Yu Gothic UI', 'Noto Sans CJK JP', 'Noto Sans JP', sans-serif;
-    color: var(--fg);
-    background: var(--bg);
-    padding: 56px 68px;
-    line-height: 1.65;
-    letter-spacing: 0.01em;
-    font-feature-settings: "palt";
-    font-size: 23px;
+    font-family: "Noto Sans CJK JP", "Noto Sans JP", "Hiragino Sans", "Yu Gothic UI", "Inter", sans-serif;
+    color: #1e293b;
+    padding: 40px 60px;
+    font-size: 26px;
+    line-height: 1.6;
   }
-
-  h1, h2, h3 {
-    color: var(--accent);
-    line-height: 1.35;
-    font-weight: 700;
-  }
-
   h1 {
-    font-size: 1.55em;
-    border-bottom: 2px solid var(--accent);
-    padding-bottom: 0.25em;
-    margin: 0 0 0.7em 0;
-  }
-  h2 { font-size: 1.15em; color: var(--fg); margin: 0.9em 0 0.3em; }
-  h3 { font-size: 1em; color: var(--fg); margin: 0.7em 0 0.2em; }
-
-  strong { color: var(--accent); font-weight: 700; }
-
-  ul, ol { padding-left: 1.2em; margin: 0.3em 0; }
-  li { margin: 0.15em 0; }
-  li::marker { color: var(--muted); }
-
-  table {
-    font-size: 0.88em;
-    border-collapse: collapse;
-    width: 100%;
-    margin: 0.5em 0;
-  }
-  th, td {
-    padding: 8px 12px;
-    border-bottom: 1px solid var(--line);
-    text-align: left;
-    vertical-align: top;
-  }
-  th {
-    border-bottom: 2px solid var(--accent);
     color: var(--accent);
+    font-size: 1.5em;
+    font-weight: 800;
+    border-bottom: 3px solid var(--accent);
+    padding-bottom: 8px;
+    margin-bottom: 16px;
+  }
+  h3 {
+    color: var(--accent2);
+    font-size: 0.95em;
+    margin-top: 14px;
+    margin-bottom: 4px;
+  }
+  strong { color: var(--accent); }
+  table { font-size: 0.74em; border-collapse: collapse; width: 100%; }
+  th {
+    background: var(--accent);
+    color: white;
     font-weight: 600;
+    padding: 6px 10px;
   }
-
-  blockquote {
-    border-left: 3px solid var(--accent);
-    background: var(--accent-soft);
-    padding: 10px 16px;
-    margin: 0.8em 0;
-    color: var(--fg);
-    font-style: normal;
-  }
-
-  code {
-    background: #f3f4f6;
-    padding: 1px 6px;
-    border-radius: 3px;
-    font-size: 0.88em;
-  }
+  td { padding: 5px 10px; border: 1px solid #e2e8f0; }
+  tr:nth-child(even) { background: var(--gray-light); }
   pre {
-    background: #f9fafb;
-    border: 1px solid var(--line);
-    border-radius: 4px;
-    padding: 14px 18px;
-    font-size: 0.8em;
-    line-height: 1.55;
+    font-size: 0.68em;
+    background: var(--gray-light) !important;
+    border-radius: 8px;
+    border-left: 4px solid var(--accent);
+    padding: 12px 16px !important;
+    line-height: 1.45;
   }
-
-  section::after {
-    color: var(--muted);
-    font-size: 0.65em;
+  code { font-size: 0.9em; }
+  ul, ol { margin: 4px 0; }
+  li { margin: 2px 0; }
+  blockquote {
+    border-left: 4px solid var(--accent);
+    background: var(--gray-light);
+    padding: 10px 16px;
+    margin: 8px 0;
+    font-style: normal;
+    color: #1e293b;
   }
-  header, footer {
-    color: var(--muted);
-    font-size: 0.72em;
+  section.title {
+    display: flex; flex-direction: column;
+    justify-content: center; align-items: center;
+    text-align: center;
+    background: linear-gradient(135deg, #eff6ff 0%, #f5f3ff 100%);
   }
-
-  .lead { color: var(--muted); font-size: 0.92em; margin-top: -0.4em; }
+  section.title h1 {
+    font-size: 2.2em; border: none; color: var(--accent);
+  }
+  section.title p { color: var(--gray); font-size: 1.05em; }
+  section.part {
+    display: flex; flex-direction: column;
+    justify-content: center; align-items: center;
+    text-align: center;
+    background: linear-gradient(135deg, #eff6ff 0%, #f0fdf4 100%);
+  }
+  section.part h1 {
+    font-size: 2em; border: none; color: var(--accent);
+  }
+  section.part p { color: var(--gray); font-size: 1.2em; }
+  .tag {
+    display: inline-block;
+    background: var(--accent-light);
+    color: var(--accent);
+    border-radius: 16px;
+    padding: 2px 12px;
+    font-size: 0.7em;
+    font-weight: 600;
+    margin: 2px;
+  }
+  footer { color: var(--gray) !important; font-size: 0.65em !important; }
+  section::after { color: var(--gray); font-size: 0.65em; }
 ---
+
+<!-- _class: title -->
 
 # 評価指標の再設計
 
-<p class="lead">具体項目の列挙から抽象軸への導出プロセス</p>
+具体項目の列挙から抽象軸への導出プロセス
 
-2026-04-21 — 阿部
+**阿部 雄斗** — SpeechArena
+2026/04/21
 
 ---
 
@@ -138,10 +137,17 @@ Step 5   UI に落とす       実装反映
 
 ---
 
+<!-- _class: part -->
+
+# Part 1: 具体項目を列挙する
+
+Step 1 — 抽象軸を意識せずフラットに並べる
+
+---
+
 # Step 1: 具体項目の列挙（音響レベル）
 
 ### A. 発話の音響品質
-
 - ノイズ・歪み・クリッピングがないか
 - 音量の安定性（急な音量変化がないか）
 - 発音の明瞭さ（子音欠落、母音の不鮮明さ）
@@ -150,7 +156,6 @@ Step 5   UI に落とす       実装反映
 - 話速・ポーズ（間）の長さ
 
 ### B. 通信品質
-
 - 音切れ・途切れ（パケットロス）
 - 遅延
 
@@ -159,7 +164,6 @@ Step 5   UI に落とす       実装反映
 # Step 1: 具体項目の列挙（対話レベル）
 
 ### C. ターンテイキング
-
 - 発話開始タイミング
 - 終話タイミング（被せてこないか）
 - 相槌（バックチャネル）の自然さ
@@ -167,7 +171,6 @@ Step 5   UI に落とす       実装反映
 - 割り込み時の挙動
 
 ### D. 聴感・人間らしさ
-
 - 人と話している感覚
 - 感情表現（抑揚、笑い、驚き）
 - 応答速度の人間らしさ
@@ -178,7 +181,6 @@ Step 5   UI に落とす       実装反映
 # Step 1: 具体項目の列挙（内容レベル）
 
 ### E. 意味理解・応答内容
-
 - 発話の意味が聞き取れる
 - 質問に対して的確な応答が返る
 - 文脈の保持（前の発話を覚えている）
@@ -186,11 +188,18 @@ Step 5   UI に落とす       実装反映
 - ハルシネーション（根拠なき情報）がない
 
 ### F. 対話の有用性
-
 - 目的を達成できた / もう一度話したい
 - 会話がスムーズに進んだ / 情報として有益
 
-A〜F の 6 カテゴリから計 **27 項目**を候補として抽出。
+→ A〜F の 6 カテゴリから計 **27 項目** を候補として抽出
+
+---
+
+<!-- _class: part -->
+
+# Part 2: 抽象軸へ再構成する
+
+Step 2–4 — クラスタリング・軸命名・現行軸との対応
 
 ---
 
@@ -204,8 +213,7 @@ A〜F の 6 カテゴリから計 **27 項目**を候補として抽出。
 | Full-Duplex Challenge (IS 2024) | 対話音声 | naturalness / turn-taking / content |
 
 ### 対話音声ならではの違い
-
-合成音は静的な 1 発話、対話は**時間軸**を持ち、評価者が**当事者**。
+合成音は静的な 1 発話、対話は **時間軸** を持ち、評価者が **当事者**。
 ターンテイキングや沈黙の扱いなど、動的な観点が加わる。
 
 ---
@@ -234,7 +242,7 @@ B1–B2（通信品質）は独立した二値項目として継続。
 | 対話有用性 | Ⅴ. 対話としての有用性 | 高粒度のまま独立扱い |
 | — | Ⅱ. 対話進行のタイミング | **新設** |
 
-現行軸を否定せず、**分解と補強**で再構成する方針。
+現行軸を否定せず、**分解と補強** で再構成する方針。
 Ⅱ を新設することで Full-Duplex モデルの特徴を捉える。
 
 ---
@@ -252,9 +260,17 @@ Layer 2   総合評価（高粒度・独立）
           Ⅴ. 対話としての有用性
 ```
 
-- Layer 1 の 4軸は**同じ粒度**で揃える
+- Layer 1 の 4軸は **同じ粒度** で揃える
 - Layer 2 は独立した軸として分析時も別扱い
 - これにより「音が悪くても有用」のような矛盾パターンを許容したまま、相関を論じられる
+
+---
+
+<!-- _class: part -->
+
+# Part 3: UI・論文・議論
+
+Step 5 先取りと、本日の論点整理
 
 ---
 
@@ -286,15 +302,15 @@ Q7  音切れはありましたか？   YES / NO
 5. **Step 5 検証** — パイロット評価で軸間相関分析
 6. **考察** — 当事者評価の限界、リファレンス不在の影響
 
-「なぜこの軸か」を**具体項目から逆算**して説明可能な形にする。
+→ 「なぜこの軸か」を **具体項目から逆算** して説明可能な形にする
 
 ---
 
 # 今日議論したいこと
 
-1. **27 項目**の過不足: 漏れや冗長はないか
-2. **Ⅱ. 対話進行のタイミング**を新軸として立てるべきか
-3. **Ⅳ と Ⅴ の境界**は明確か
+1. **27 項目** の過不足: 漏れや冗長はないか
+2. **Ⅱ. 対話進行のタイミング** を新軸として立てるべきか
+3. **Ⅳ と Ⅴ の境界** は明確か
 4. **KJ 法 / 親和図法** のワークショップを開く価値はあるか
 
 ### 次回までのアクション（案）
