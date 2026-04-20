@@ -96,6 +96,35 @@ style: |
   }
   footer { color: var(--gray) !important; font-size: 0.65em !important; }
   section::after { color: var(--gray); font-size: 0.65em; }
+  .stages { display: flex; flex-direction: column; gap: 12px; margin: 18px 0; }
+  .stage {
+    display: grid;
+    grid-template-columns: 110px 1fr 1fr;
+    align-items: center;
+    gap: 16px;
+    background: white;
+    border: 1px solid #e2e8f0;
+    border-left: 5px solid var(--accent);
+    border-radius: 8px;
+    padding: 12px 18px;
+  }
+  .stage.s2 { border-left-color: var(--accent2); }
+  .stage.s3 { border-left-color: var(--accent3); }
+  .stage .badge {
+    background: var(--accent);
+    color: white;
+    font-weight: 700;
+    text-align: center;
+    border-radius: 6px;
+    padding: 5px 0;
+    font-size: 0.9em;
+  }
+  .stage.s2 .badge { background: var(--accent2); }
+  .stage.s3 .badge { background: var(--accent3); }
+  .stage .name { font-weight: 700; font-size: 1.05em; color: #1e293b; }
+  .stage .role { color: var(--gray); font-size: 0.85em; margin-top: 2px; }
+  .stage .when { color: var(--gray); font-size: 0.9em; text-align: right; }
+  .stage .when strong { color: #1e293b; }
 ---
 
 <!-- _class: title -->
@@ -149,19 +178,25 @@ LLM-jp Moshi 6 系統のクラウドソーシング評価結果
 
 # 推奨戦略: 三段構え
 
-```
-Stage 1   SLT 2026          会議版（最初の発信）
-          2026-06-17 締切    Dec 2026 発表
+<div class="stages">
+  <div class="stage">
+    <div class="badge">Stage 1</div>
+    <div><div class="name">SLT 2026</div><div class="role">会議版（最初の発信）</div></div>
+    <div class="when"><strong>2026-06-17</strong> 締切<br/>Dec 2026 発表</div>
+  </div>
+  <div class="stage s2">
+    <div class="badge">Stage 2</div>
+    <div><div class="name">Interspeech 2027</div><div class="role">本丸（完全版）</div></div>
+    <div class="when"><strong>2027-02</strong> 頃締切<br/>Aug 2027 発表</div>
+  </div>
+  <div class="stage s3">
+    <div class="badge">Stage 3</div>
+    <div><div class="name">IEEE/ACM TASLP</div><div class="role">ジャーナル（拡張版）</div></div>
+    <div class="when">常時受付<br/>2027 年中に投稿</div>
+  </div>
+</div>
 
-Stage 2   Interspeech 2027  本丸（完全版）
-          2027-02 頃締切    Aug 2027 発表
-
-Stage 3   IEEE/ACM TASLP    ジャーナル（拡張版）
-          常時受付           2027 年中に投稿
-```
-
-まず SLT で早期に発信し、得られた反応とデータ量を踏まえて
-Interspeech 2027 で本丸版を出す。最終的にジャーナル版で記録化。
+まず SLT で早期に発信し、得られた反応とデータ量を踏まえて Interspeech 2027 で本丸版を出す。最終的にジャーナル版で記録化。
 
 ---
 

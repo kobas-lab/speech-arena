@@ -94,6 +94,116 @@ style: |
   }
   footer { color: var(--gray) !important; font-size: 0.65em !important; }
   section::after { color: var(--gray); font-size: 0.65em; }
+  .steps { display: flex; flex-direction: column; gap: 5px; margin: 8px 0; }
+  .steps .row {
+    display: grid;
+    grid-template-columns: 76px 1fr;
+    align-items: center;
+    gap: 14px;
+    background: white;
+    border: 1px solid #e2e8f0;
+    border-left: 4px solid var(--accent);
+    border-radius: 6px;
+    padding: 5px 14px;
+    font-size: 0.9em;
+  }
+  .steps .badge {
+    background: var(--accent);
+    color: white;
+    font-weight: 700;
+    font-size: 0.82em;
+    text-align: center;
+    padding: 3px 0;
+    border-radius: 4px;
+  }
+  .steps .row.done { border-left-color: var(--accent2); }
+  .steps .row.done .badge { background: var(--accent2); }
+  .steps .title { font-weight: 700; color: #1e293b; }
+  .steps .desc { color: var(--gray); font-size: 0.82em; }
+  .layers { display: flex; flex-direction: column; gap: 14px; margin: 18px 0; }
+  .layer {
+    background: white;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    padding: 14px 20px;
+  }
+  .layer.l1 { border-top: 4px solid var(--accent); }
+  .layer.l2 { border-top: 4px solid var(--accent2); }
+  .layer .head {
+    display: flex; justify-content: space-between; align-items: baseline;
+    margin-bottom: 8px;
+  }
+  .layer .name { font-weight: 700; font-size: 1.05em; color: var(--accent); }
+  .layer.l2 .name { color: var(--accent2); }
+  .layer .note { color: var(--gray); font-size: 0.82em; }
+  .layer .items {
+    display: flex; flex-wrap: wrap; gap: 8px;
+  }
+  .layer .item {
+    background: var(--accent-light);
+    color: var(--accent);
+    border-radius: 6px;
+    padding: 4px 12px;
+    font-size: 0.88em;
+    font-weight: 600;
+  }
+  .layer.l2 .item { background: #ede9fe; color: var(--accent2); }
+  .qlist { margin: 6px 0; }
+  .qlist .q {
+    display: grid;
+    grid-template-columns: 48px 1fr 1.3fr;
+    align-items: center;
+    gap: 12px;
+    background: white;
+    border: 1px solid #e2e8f0;
+    border-left: 4px solid var(--accent);
+    border-radius: 6px;
+    padding: 4px 12px;
+    margin-bottom: 3px;
+    font-size: 0.88em;
+  }
+  .qlist .qid {
+    background: var(--accent);
+    color: white;
+    text-align: center;
+    font-weight: 700;
+    border-radius: 4px;
+    padding: 2px 0;
+    font-size: 0.82em;
+  }
+  .qlist .qtitle { font-weight: 700; }
+  .qlist .qdesc { color: var(--gray); font-size: 0.82em; }
+  .qlist .q.total { border-left-color: var(--accent2); }
+  .qlist .q.total .qid { background: var(--accent2); }
+  .qlist .q.meta { border-left-color: var(--accent3); }
+  .qlist .q.meta .qid { background: var(--accent3); }
+  .qdivider {
+    text-align: center;
+    color: var(--gray);
+    font-size: 0.7em;
+    margin: 3px 0 2px;
+    letter-spacing: 0.2em;
+  }
+  .chips {
+    display: flex; flex-wrap: wrap;
+    gap: 6px 8px;
+    margin: 14px 0 10px;
+    justify-content: center;
+  }
+  .chip {
+    background: white;
+    border: 1px solid #cbd5e1;
+    border-radius: 18px;
+    padding: 3px 12px;
+    font-size: 0.78em;
+    color: #334155;
+  }
+  .chip-note {
+    text-align: center;
+    color: var(--gray);
+    font-size: 0.82em;
+    margin-top: 8px;
+  }
 ---
 
 <!-- _class: title -->
@@ -125,13 +235,13 @@ style: |
 
 # プロセス全体像
 
-```
-Step 1   具体項目を列挙    抽象軸を意識しない
-Step 2   クラスタリング    類似項目をまとめる
-Step 3   抽象軸を命名      クラスタごとに名前を付ける
-Step 4   現行4軸と対応づけ  粒度もここで揃える
-Step 5   UI に落とす       実装反映
-```
+<div class="steps">
+  <div class="row"><div class="badge">Step 1</div><div><div class="title">具体項目を列挙</div><div class="desc">抽象軸を意識せずフラットに並べる</div></div></div>
+  <div class="row"><div class="badge">Step 2</div><div><div class="title">クラスタリング</div><div class="desc">類似項目をまとめる</div></div></div>
+  <div class="row"><div class="badge">Step 3</div><div><div class="title">抽象軸を命名</div><div class="desc">クラスタごとに名前を付ける</div></div></div>
+  <div class="row"><div class="badge">Step 4</div><div><div class="title">現行 4軸と対応づけ</div><div class="desc">粒度もここで揃える</div></div></div>
+  <div class="row done"><div class="badge">Step 5</div><div><div class="title">UI に落とす</div><div class="desc">実装反映（次フェーズ）</div></div></div>
+</div>
 
 本日は **Step 1〜4** の叩き台を議論します。
 
@@ -145,53 +255,37 @@ Step 1 — 抽象軸を意識せずフラットに並べる
 
 ---
 
-# Step 1: 具体項目の列挙（音響レベル）
+# Step 1: とにかく書き出す（27 項目・順不同）
 
-### A. 発話の音響品質
-- ノイズ・歪み・クリッピングがないか
-- 音量の安定性（急な音量変化がないか）
-- 発音の明瞭さ（子音欠落、母音の不鮮明さ）
-- 声質の自然さ（合成音特有の金属音・ざらつき）
-- プロソディ（ピッチ・アクセント）の自然さ
-- 話速・ポーズ（間）の長さ
-
-### B. 通信品質
-- 音切れ・途切れ（パケットロス）
-- 遅延
-
----
-
-# Step 1: 具体項目の列挙（対話レベル）
-
-### C. ターンテイキング
-- 発話開始タイミング
-- 終話タイミング（被せてこないか）
-- 相槌（バックチャネル）の自然さ
-- 沈黙・ポーズの扱い
-- 割り込み時の挙動
-
-### D. 聴感・人間らしさ
-- 人と話している感覚
-- 感情表現（抑揚、笑い、驚き）
-- 応答速度の人間らしさ
-- キャラクターの一貫性
-
----
-
-# Step 1: 具体項目の列挙（内容レベル）
-
-### E. 意味理解・応答内容
-- 発話の意味が聞き取れる
-- 質問に対して的確な応答が返る
-- 文脈の保持（前の発話を覚えている）
-- 話題が噛み合う、論理的に一貫している
-- ハルシネーション（根拠なき情報）がない
-
-### F. 対話の有用性
-- 目的を達成できた / もう一度話したい
-- 会話がスムーズに進んだ / 情報として有益
-
-→ A〜F の 6 カテゴリから計 **27 項目** を候補として抽出
+<div class="chips">
+<span class="chip">ノイズ</span>
+<span class="chip">人と話している感覚</span>
+<span class="chip">発話開始タイミング</span>
+<span class="chip">意味が聞き取れる</span>
+<span class="chip">音量の安定性</span>
+<span class="chip">相槌の自然さ</span>
+<span class="chip">感情表現（抑揚・笑い）</span>
+<span class="chip">文脈の保持</span>
+<span class="chip">発音の明瞭さ</span>
+<span class="chip">目的達成</span>
+<span class="chip">終話タイミング</span>
+<span class="chip">ハルシネーション</span>
+<span class="chip">声質の自然さ</span>
+<span class="chip">沈黙・ポーズの扱い</span>
+<span class="chip">応答速度の人間らしさ</span>
+<span class="chip">話題が噛み合う</span>
+<span class="chip">プロソディ</span>
+<span class="chip">割り込み時の挙動</span>
+<span class="chip">キャラクター一貫性</span>
+<span class="chip">的確な応答</span>
+<span class="chip">話速・ポーズ</span>
+<span class="chip">音切れ・途切れ</span>
+<span class="chip">また話したい</span>
+<span class="chip">スムーズな進行</span>
+<span class="chip">遅延</span>
+<span class="chip">情報として有益</span>
+<span class="chip">歪み・クリッピング</span>
+</div>
 
 ---
 
@@ -220,15 +314,15 @@ Step 2–4 — クラスタリング・軸命名・現行軸との対応
 
 # Step 3: クラスタリング → 抽象軸
 
-| 抽象軸 | 含まれる具体項目 | 粒度 |
+| 抽象軸 | 主な具体項目 | 粒度 |
 |---|---|---|
-| Ⅰ. 音響品質 | A1–A6（音・発音・プロソディ） | 低 |
-| Ⅱ. 対話進行のタイミング | C1–C5（ターンテイキング） | 低〜中 |
-| Ⅲ. 人間らしさ・聴感 | A4, A7, D1–D4 | 中 |
-| Ⅳ. 意味・応答の妥当性 | E1–E6 | 中 |
-| Ⅴ. 対話としての有用性 | F1–F4 | 高 |
+| Ⅰ. 音響品質 | ノイズ・発音・プロソディ・音量・話速 | 低 |
+| Ⅱ. 対話進行のタイミング | 発話開始/終話・相槌・沈黙・割り込み | 低〜中 |
+| Ⅲ. 人間らしさ・聴感 | 人と話している感覚・感情表現・応答速度・キャラ一貫性 | 中 |
+| Ⅳ. 意味・応答の妥当性 | 意味聞き取り・的確な応答・文脈保持・ハルシネーション | 中 |
+| Ⅴ. 対話としての有用性 | 目的達成・また話したい・情報有益・スムーズ進行 | 高 |
 
-B1–B2（通信品質）は独立した二値項目として継続。
+音切れ・遅延は独立した二値項目（通信品質）として継続。
 
 ---
 
@@ -236,9 +330,9 @@ B1–B2（通信品質）は独立した二値項目として継続。
 
 | 現行 | 新案 | 変更点 |
 |---|---|---|
-| 音声自然性 | Ⅰ. 音響品質 | A1–A6 に具体化 |
+| 音声自然性 | Ⅰ. 音響品質 | 音響項目を具体化 |
 | 聴感自然性 | Ⅲ. 人間らしさ・聴感 | 人間らしさに寄せ直し |
-| 意味理解性 | Ⅳ. 意味・応答の妥当性 | E1–E6 で網羅 |
+| 意味理解性 | Ⅳ. 意味・応答の妥当性 | 文脈保持・ハルシネーションまで網羅 |
 | 対話有用性 | Ⅴ. 対話としての有用性 | 高粒度のまま独立扱い |
 | — | Ⅱ. 対話進行のタイミング | **新設** |
 
@@ -249,16 +343,23 @@ B1–B2（通信品質）は独立した二値項目として継続。
 
 # 粒度問題への対応: 二段構成
 
-```
-Layer 1   コンポーネント評価（低〜中粒度で揃える）
-          Ⅰ. 音響品質
-          Ⅱ. 対話進行のタイミング
-          Ⅲ. 人間らしさ・聴感
-          Ⅳ. 意味・応答の妥当性
-
-Layer 2   総合評価（高粒度・独立）
-          Ⅴ. 対話としての有用性
-```
+<div class="layers">
+  <div class="layer l1">
+    <div class="head"><div class="name">Layer 1 — コンポーネント評価</div><div class="note">低〜中粒度で揃える</div></div>
+    <div class="items">
+      <div class="item">Ⅰ. 音響品質</div>
+      <div class="item">Ⅱ. 対話進行のタイミング</div>
+      <div class="item">Ⅲ. 人間らしさ・聴感</div>
+      <div class="item">Ⅳ. 意味・応答の妥当性</div>
+    </div>
+  </div>
+  <div class="layer l2">
+    <div class="head"><div class="name">Layer 2 — 総合評価</div><div class="note">高粒度・独立</div></div>
+    <div class="items">
+      <div class="item">Ⅴ. 対話としての有用性</div>
+    </div>
+  </div>
+</div>
 
 - Layer 1 の 4軸は **同じ粒度** で揃える
 - Layer 2 は独立した軸として分析時も別扱い
@@ -276,17 +377,17 @@ Step 5 先取りと、本日の論点整理
 
 # Step 5 先取り: UI に載せる質問（案）
 
-```
-Q1  音響品質 ..............  ノイズ / 発音 / プロソディ
-Q2  タイミング ............  相槌 / ターン交代
-Q3  人間らしさ ............  人と話している感覚
-Q4  応答内容 ..............  意味 / 文脈 / 妥当性
-──────────────────────────────────────────────
-Q5  総合（Layer 2）.......  また話したいか
-──────────────────────────────────────────────
-Q6  会話は成功しましたか？   SUCCESS / FAILURE
-Q7  音切れはありましたか？   YES / NO
-```
+<div class="qlist">
+  <div class="q"><div class="qid">Q1</div><div class="qtitle">音響品質</div><div class="qdesc">ノイズ / 発音 / プロソディ</div></div>
+  <div class="q"><div class="qid">Q2</div><div class="qtitle">タイミング</div><div class="qdesc">相槌 / ターン交代</div></div>
+  <div class="q"><div class="qid">Q3</div><div class="qtitle">人間らしさ</div><div class="qdesc">人と話している感覚</div></div>
+  <div class="q"><div class="qid">Q4</div><div class="qtitle">応答内容</div><div class="qdesc">意味 / 文脈 / 妥当性</div></div>
+  <div class="qdivider">— Layer 2 —</div>
+  <div class="q total"><div class="qid">Q5</div><div class="qtitle">総合</div><div class="qdesc">また話したいか</div></div>
+  <div class="qdivider">— 付帯質問 —</div>
+  <div class="q meta"><div class="qid">Q6</div><div class="qtitle">会話は成功しましたか？</div><div class="qdesc">SUCCESS / FAILURE</div></div>
+  <div class="q meta"><div class="qid">Q7</div><div class="qtitle">音切れはありましたか？</div><div class="qdesc">YES / NO</div></div>
+</div>
 
 各 Q に具体項目を tooltip で表示し、判断基準を揃える。
 所要時間は現行と同等（評価入力 30 秒程度）。
