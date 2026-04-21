@@ -242,6 +242,61 @@ style: |
   .flow .stage.future {
     opacity: 0.45;
   }
+  .ui { display: flex; flex-direction: column; gap: 5px; margin: 10px 0 6px; }
+  .ui .card {
+    background: white;
+    border: 1px solid #e2e8f0;
+    border-left: 4px solid var(--accent);
+    border-radius: 6px;
+    padding: 5px 12px;
+    display: grid;
+    grid-template-columns: 44px 1fr auto;
+    gap: 12px;
+    align-items: center;
+    font-size: 0.82em;
+  }
+  .ui .card .qid {
+    background: var(--accent);
+    color: white;
+    text-align: center;
+    font-weight: 700;
+    border-radius: 4px;
+    padding: 2px 0;
+    font-size: 0.8em;
+  }
+  .ui .card .q { font-weight: 700; color: #1e293b; }
+  .ui .card .hint { color: var(--gray); font-size: 0.82em; margin-top: 1px; }
+  .ui .card .scale { display: flex; gap: 4px; }
+  .ui .card .opt {
+    width: 24px; height: 24px;
+    border: 1px solid #cbd5e1;
+    border-radius: 50%;
+    display: inline-flex;
+    align-items: center; justify-content: center;
+    font-size: 0.78em;
+    color: var(--gray);
+    background: white;
+  }
+  .ui .card .bin {
+    border: 1px solid #cbd5e1;
+    border-radius: 5px;
+    padding: 2px 12px;
+    font-size: 0.82em;
+    color: var(--gray);
+    background: white;
+    font-weight: 600;
+  }
+  .ui .card.total { border-left-color: var(--accent2); }
+  .ui .card.total .qid { background: var(--accent2); }
+  .ui .card.meta { border-left-color: var(--accent3); }
+  .ui .card.meta .qid { background: var(--accent3); }
+  .ui-divider {
+    text-align: center;
+    color: var(--gray);
+    font-size: 0.7em;
+    margin: 3px 0 2px;
+    letter-spacing: 0.2em;
+  }
 ---
 
 <!-- _class: title -->
@@ -415,20 +470,17 @@ P.800 の遅延測定は通信品質としてあるが、**応答生成の遅延
 
 # Step 5 先取り: UI に載せる質問（案）
 
-<div class="qlist">
-  <div class="q"><div class="qid">Q1</div><div class="qtitle">音響品質</div><div class="qdesc">ノイズ / 発音 / プロソディ</div></div>
-  <div class="q"><div class="qid">Q2</div><div class="qtitle">タイミング</div><div class="qdesc">相槌 / ターン交代</div></div>
-  <div class="q"><div class="qid">Q3</div><div class="qtitle">人間らしさ</div><div class="qdesc">人と話している感覚</div></div>
-  <div class="q"><div class="qid">Q4</div><div class="qtitle">応答内容</div><div class="qdesc">意味 / 文脈 / 妥当性</div></div>
-  <div class="qdivider">— Layer 2 —</div>
-  <div class="q total"><div class="qid">Q5</div><div class="qtitle">総合</div><div class="qdesc">また話したいか</div></div>
-  <div class="qdivider">— 付帯質問 —</div>
-  <div class="q meta"><div class="qid">Q6</div><div class="qtitle">会話は成功しましたか？</div><div class="qdesc">SUCCESS / FAILURE</div></div>
-  <div class="q meta"><div class="qid">Q7</div><div class="qtitle">音切れはありましたか？</div><div class="qdesc">YES / NO</div></div>
+<div class="ui">
+  <div class="card"><div class="qid">Q1</div><div><div class="q">音響品質はどう感じましたか？</div><div class="hint">ノイズ・発音・プロソディ</div></div><div class="scale"><span class="opt">1</span><span class="opt">2</span><span class="opt">3</span><span class="opt">4</span><span class="opt">5</span></div></div>
+  <div class="card"><div class="qid">Q2</div><div><div class="q">対話のタイミングはどう感じましたか？</div><div class="hint">相槌・ターン交代・沈黙</div></div><div class="scale"><span class="opt">1</span><span class="opt">2</span><span class="opt">3</span><span class="opt">4</span><span class="opt">5</span></div></div>
+  <div class="card"><div class="qid">Q3</div><div><div class="q">人と話している感じがしましたか？</div><div class="hint">感情表現・応答速度・キャラの一貫性</div></div><div class="scale"><span class="opt">1</span><span class="opt">2</span><span class="opt">3</span><span class="opt">4</span><span class="opt">5</span></div></div>
+  <div class="card"><div class="qid">Q4</div><div><div class="q">応答内容は妥当でしたか？</div><div class="hint">意味・文脈・ハルシネーション</div></div><div class="scale"><span class="opt">1</span><span class="opt">2</span><span class="opt">3</span><span class="opt">4</span><span class="opt">5</span></div></div>
+  <div class="ui-divider">— Layer 2 —</div>
+  <div class="card total"><div class="qid">Q5</div><div><div class="q">もう一度このモデルと話したいと思いましたか？</div><div class="hint">総合評価</div></div><div class="scale"><span class="opt">1</span><span class="opt">2</span><span class="opt">3</span><span class="opt">4</span><span class="opt">5</span></div></div>
+  <div class="ui-divider">— 付帯質問 —</div>
+  <div class="card meta"><div class="qid">Q6</div><div><div class="q">会話は成功しましたか？</div></div><div class="scale"><span class="bin">成功</span><span class="bin">失敗</span></div></div>
+  <div class="card meta"><div class="qid">Q7</div><div><div class="q">音切れはありましたか？</div></div><div class="scale"><span class="bin">あり</span><span class="bin">なし</span></div></div>
 </div>
-
-各 Q に具体項目を tooltip で表示し、判断基準を揃える。
-所要時間は現行と同等（評価入力 30 秒程度）。
 
 ---
 
