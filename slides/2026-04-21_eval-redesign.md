@@ -330,9 +330,9 @@ style: |
 
 <div class="steps">
   <div class="row"><div class="badge">Step 1</div><div><div class="title">具体項目を列挙</div><div class="desc">抽象軸を意識せずフラットに並べる</div></div></div>
-  <div class="row"><div class="badge">Step 2</div><div><div class="title">クラスタリング</div><div class="desc">類似項目をまとめる</div></div></div>
-  <div class="row"><div class="badge">Step 3</div><div><div class="title">抽象軸を命名</div><div class="desc">クラスタごとに名前を付ける</div></div></div>
-  <div class="row"><div class="badge">Step 4</div><div><div class="title">現行 4軸と対応づけ</div><div class="desc">粒度もここで揃える</div></div></div>
+  <div class="row"><div class="badge">Step 2</div><div><div class="title">既存プロトコルを参照</div><div class="desc">ITU 標準の発展段階と対話音声の現在地を確認</div></div></div>
+  <div class="row"><div class="badge">Step 3</div><div><div class="title">クラスタリング → 抽象軸</div><div class="desc">類似項目をまとめて軸名を付ける</div></div></div>
+  <div class="row"><div class="badge">Step 4</div><div><div class="title">現行 4軸との対応づけ</div><div class="desc">粒度もここで揃える</div></div></div>
   <div class="row done"><div class="badge">Step 5</div><div><div class="title">UI に落とす</div><div class="desc">実装反映（次フェーズ）</div></div></div>
 </div>
 
@@ -484,33 +484,36 @@ P.800 の遅延測定は通信品質としてあるが、**応答生成の遅延
 
 ---
 
-# 論文での記述プラン
+# 論文での記述プラン（SLT 4 ページ構成）
 
-1. **背景** — MOS を Full-Duplex 対話にそのまま適用する困難
-2. **Step 1 列挙** — 27 項目（Appendix に全リスト）
-3. **Step 2–3 クラスタリング** — 親和図法 + 研究室内レビュー
-4. **Step 4 軸命名** — 5軸 + 二段構成の提案
-5. **Step 5 検証** — パイロット評価で軸間相関分析
-6. **考察** — 当事者評価の限界、リファレンス不在の影響
+1. **背景** — ITU-T P.800/P.808 は対話音声未カバー、標準化の段階論
+2. **評価軸の導出** — 27 項目列挙 → 親和図法 → 5軸 + 二段構成（全工程を 1 章に集約）
+3. **評価プラットフォーム実装** — UI / Bradley-Terry / クラウドソーシング設計
+4. **100 名パイロット評価** — 軸間相関・モデル間順位・被験者一致度
+5. **考察** — 当事者評価の限界、リファレンス不在、次段階への布石
 
-→ 「なぜこの軸か」を **具体項目から逆算** して説明可能な形にする
+→ 導出プロセス（章 2）は **1 章に圧縮**、実装と運用結果（章 3–4）に紙幅を割いて差別化
 
 ---
 
-# 今日議論したいこと
+# 残っているタスク
 
-1. **27 項目** の過不足: 漏れや冗長はないか
-2. **Ⅱ. 対話進行のタイミング** を新軸として立てるべきか
-3. **Ⅳ と Ⅴ の境界** は明確か
-4. **KJ 法 / 親和図法** のワークショップを開く価値はあるか
+### 1. 質問事項の変更（UI 反映）
+- 本日の議論を踏まえ、5軸 + Layer 2 の質問文を確定
+- 付帯質問（成功/失敗・音切れ有無）のラベル調整
 
-### 次回までのアクション（案）
+### 2. 100 名規模のクラウドソーシング評価
+- SLT 投稿に向けた必要最小規模のデータ収集
+- パイロット運用で軸間相関・モデル間順位を検証
 
-| タスク | 担当 | 期限 |
+### 運用規模とインフラの関係
+
+| 規模 | 運営形態 | インフラ要件 |
 |---|---|---|
-| 27 項目の確定（本議論の反映） | 阿部 | 4/28 |
-| パイロット評価で軸間相関分析 | 阿部 | 5 月前半 |
-| 論文ドラフトの評価セクション執筆 | 阿部 | 5 月中旬 |
+| 〜100 名（SLT 向け） | **人数を絞って運営主導でクローズド運用** | 現行構成で対応可 |
+| 常時公開（本番運用） | 誰でも参加できる開放型 | **GPU 同時接続・負荷分散・認証含め再設計が必要** |
+
+→ 当面は 100 名クローズド運用に集中し、インフラ再設計は SLT 投稿後に着手
 
 ---
 
