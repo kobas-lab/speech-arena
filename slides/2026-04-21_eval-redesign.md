@@ -186,16 +186,16 @@ style: |
   }
   .chips {
     display: flex; flex-wrap: wrap;
-    gap: 6px 8px;
-    margin: 14px 0 10px;
+    gap: 5px 6px;
+    margin: 10px 0 8px;
     justify-content: center;
   }
   .chip {
     background: white;
     border: 1px solid #cbd5e1;
-    border-radius: 18px;
-    padding: 3px 12px;
-    font-size: 0.78em;
+    border-radius: 16px;
+    padding: 3px 11px;
+    font-size: 0.72em;
     color: #334155;
   }
   .chip-note {
@@ -203,6 +203,44 @@ style: |
     color: var(--gray);
     font-size: 0.82em;
     margin-top: 8px;
+  }
+  .flow {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 8px;
+    margin: 12px 0 14px;
+    position: relative;
+  }
+  .flow .stage {
+    background: white;
+    border: 1px solid #e2e8f0;
+    border-top: 3px solid var(--accent);
+    border-radius: 8px;
+    padding: 10px 8px;
+    text-align: center;
+  }
+  .flow .stage .num {
+    color: var(--accent);
+    font-weight: 700;
+    font-size: 0.78em;
+    letter-spacing: 0.05em;
+  }
+  .flow .stage .name {
+    font-weight: 700;
+    color: #1e293b;
+    margin: 4px 0 3px;
+    font-size: 0.95em;
+  }
+  .flow .stage .note {
+    color: var(--gray);
+    font-size: 0.78em;
+  }
+  .flow .stage.current {
+    background: var(--accent-light);
+    border-color: var(--accent);
+  }
+  .flow .stage.future {
+    opacity: 0.45;
   }
 ---
 
@@ -247,68 +285,76 @@ style: |
 
 ---
 
-<!-- _class: part -->
-
-# Part 1: 具体項目を列挙する
-
-Step 1 — 抽象軸を意識せずフラットに並べる
-
----
-
 # Step 1: とにかく書き出す（27 項目・順不同）
 
 <div class="chips">
-<span class="chip">ノイズ</span>
-<span class="chip">人と話している感覚</span>
-<span class="chip">発話開始タイミング</span>
-<span class="chip">意味が聞き取れる</span>
-<span class="chip">音量の安定性</span>
-<span class="chip">相槌の自然さ</span>
-<span class="chip">感情表現（抑揚・笑い）</span>
-<span class="chip">文脈の保持</span>
-<span class="chip">発音の明瞭さ</span>
-<span class="chip">目的達成</span>
-<span class="chip">終話タイミング</span>
-<span class="chip">ハルシネーション</span>
-<span class="chip">声質の自然さ</span>
-<span class="chip">沈黙・ポーズの扱い</span>
-<span class="chip">応答速度の人間らしさ</span>
-<span class="chip">話題が噛み合う</span>
-<span class="chip">プロソディ</span>
-<span class="chip">割り込み時の挙動</span>
-<span class="chip">キャラクター一貫性</span>
-<span class="chip">的確な応答</span>
-<span class="chip">話速・ポーズ</span>
-<span class="chip">音切れ・途切れ</span>
-<span class="chip">また話したい</span>
-<span class="chip">スムーズな進行</span>
-<span class="chip">遅延</span>
-<span class="chip">情報として有益</span>
-<span class="chip">歪み・クリッピング</span>
+<span class="chip">ノイズは気になりましたか？</span>
+<span class="chip">人と話している感じがしましたか？</span>
+<span class="chip">発話を始めるタイミングは自然でしたか？</span>
+<span class="chip">発話の意味は聞き取れましたか？</span>
+<span class="chip">音量は安定していましたか？</span>
+<span class="chip">相槌は自然でしたか？</span>
+<span class="chip">感情表現は豊かでしたか？</span>
+<span class="chip">前の話を覚えていましたか？</span>
+<span class="chip">発音は明瞭でしたか？</span>
+<span class="chip">会話の目的は達成できましたか？</span>
+<span class="chip">終話のタイミングは自然でしたか？</span>
+<span class="chip">根拠のない発言はありませんでしたか？</span>
+<span class="chip">声質は自然でしたか？</span>
+<span class="chip">沈黙の扱いは自然でしたか？</span>
+<span class="chip">応答速度は人間らしかったですか？</span>
+<span class="chip">話題は噛み合っていましたか？</span>
+<span class="chip">抑揚・アクセントは自然でしたか？</span>
+<span class="chip">割り込んだ時の反応は自然でしたか？</span>
+<span class="chip">キャラクターは一貫していましたか？</span>
+<span class="chip">質問に的確な応答が返りましたか？</span>
+<span class="chip">話す速さや間は自然でしたか？</span>
+<span class="chip">音が途切れませんでしたか？</span>
+<span class="chip">また話したいと思いましたか？</span>
+<span class="chip">会話はスムーズに進みましたか？</span>
+<span class="chip">応答に遅延はありませんでしたか？</span>
+<span class="chip">情報として役に立ちましたか？</span>
+<span class="chip">音に歪みはありませんでしたか？</span>
 </div>
 
 ---
 
-<!-- _class: part -->
+# Step 2: プロトコル標準化の発展段階
 
-# Part 2: 抽象軸へ再構成する
+<div class="flow">
+  <div class="stage"><div class="num">段階 1</div><div class="name">個別研究</div><div class="note">単発論文で提案</div></div>
+  <div class="stage"><div class="num">段階 2</div><div class="name">複数論文で再現</div><div class="note">他者追試・収束</div></div>
+  <div class="stage"><div class="num">段階 3</div><div class="name">ベストプラクティス化</div><div class="note">推奨手法に収束</div></div>
+  <div class="stage"><div class="num">段階 4</div><div class="name">ITU 等で標準化</div><div class="note">公式プロトコル</div></div>
+</div>
 
-Step 2–4 — クラスタリング・軸命名・現行軸との対応
+### 合成音声は段階 4 まで到達している
+- **ITU-T P.800** — ラボ環境での主観音声品質評価
+- **ITU-T P.808** — クラウドソーシング版
+- **ITU-R BS.1534** — MUSHRA（参照付き多試料比較）
+- 各研究室の MOS 的手法が、再現→ベストプラクティス化を経て ITU 標準へ
+
+### 対話音声は段階 1〜2 付近
+- **対話版 P.800 / P.808 は未成立**
+- SSA（テキスト対話）、FD-Bench 等のベンチマーク提案が散発的にある段階
+- → 本研究は **段階 1 の個別提案** として FD-DMOS を位置づける
 
 ---
 
-# Step 2: 参考にした既存プロトコル
+# Step 2 (続): 対話音声ならではの違い
 
-| プロトコル | 対象 | 特徴 |
-|---|---|---|
-| MOS | 合成音声 | 単一発話・静的 |
-| MUSHRA | 合成音声 | 参照あり・多試料比較 |
-| SSA | テキスト対話 | sensibleness + specificity |
-| Full-Duplex Challenge (IS 2024) | 対話音声 | naturalness / turn-taking / content |
+なぜ対話音声は標準化が遅れているのか:
 
-### 対話音声ならではの違い
-合成音は静的な 1 発話、対話は **時間軸** を持ち、評価者が **当事者**。
-ターンテイキングや沈黙の扱いなど、動的な観点が加わる。
+### 静的な 1 発話ではなく、時間軸を持つ
+ターンの切り替え、沈黙、相槌、割り込みなど **動的な挙動** を評価対象に含む必要がある。
+
+### 評価者が「聴衆」ではなく「当事者」
+P.800 系は録音済み音声を聴いて採点するが、対話は **評価者自身が話し手** になる。
+→ 試料ごとに体験が変わり、参照音声の置き方も単純ではない。
+
+### リアルタイム性
+P.800 の遅延測定は通信品質としてあるが、**応答生成の遅延** は別概念。
+
 
 ---
 
@@ -364,14 +410,6 @@ Step 2–4 — クラスタリング・軸命名・現行軸との対応
 - Layer 1 の 4軸は **同じ粒度** で揃える
 - Layer 2 は独立した軸として分析時も別扱い
 - これにより「音が悪くても有用」のような矛盾パターンを許容したまま、相関を論じられる
-
----
-
-<!-- _class: part -->
-
-# Part 3: UI・論文・議論
-
-Step 5 先取りと、本日の論点整理
 
 ---
 
