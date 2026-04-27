@@ -13,7 +13,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
-    "@types/react": "^18.3.1",
+    "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
     "@types/ws": "^8.18.1",
     "autoprefixer": "^10.5.0",
@@ -36,7 +36,7 @@
   "dependencies": {
     "eruda": "^3.4.3",
     "opus-recorder": "^8.0.5",
-    "react": "^18.3.1",
+    "react": "^19.2.5",
     "react-dom": "^19.2.5",
     "react-router-dom": "^6.23.1",
     "webm-duration-fix": "^1.0.4",
